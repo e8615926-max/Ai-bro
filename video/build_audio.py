@@ -12,7 +12,7 @@ MOCK = os.environ.get('MOCK')
 if not MOCK:
     sys.path.insert(0, HERE)
     from tts_rhvoice import synth
-VOICE = {'main': ('Aleksandr', -0.18, -0.3), 'mom': ('Anna', -0.2, 0.0), 'whisper': ('Aleksandr', -0.25, -0.35)}
+VOICE = {'main': ('Aleksandr', -0.18, -0.58), 'mom': ('Anna', -0.2, 0.0), 'whisper': ('Aleksandr', -0.25, -0.58)}
 
 
 def ff(data, filt):
@@ -34,13 +34,15 @@ def say(text, voice):
     nz = np.where(np.abs(x) > 0.01)[0]
     x = x[max(0, nz[0] - 400): nz[-1] + 2000] if len(nz) else x
     if voice == 'main':
-        x = ff(x, 'highpass=f=70,equalizer=f=180:t=q:w=1:g=3,equalizer=f=3500:t=q:w=1:g=2,'
+        # тембр ниже (формантный сдвиг) — голос взрослее и тяжелее
+        x = ff(x, 'asetrate=44100*0.86,aresample=44100,atempo=1.1628,'
+                  'highpass=f=60,equalizer=f=120:t=q:w=1:g=4,equalizer=f=2500:t=q:w=1:g=-2,equalizer=f=4500:t=q:w=1:g=1.5,'
                   'acompressor=threshold=-20dB:ratio=3:attack=5:release=80,aecho=0.8:0.5:35:0.12')
     elif voice == 'mom':
         x = ff(x, 'asetrate=44100*0.93,aresample=44100,atempo=0.92,highpass=f=350,lowpass=f=3200,'
                   'aecho=0.8:0.7:60|120:0.35|0.2,tremolo=f=6:d=0.25')
     else:  # шёпот: тот же голос, двоится и уходит в тень
-        x = ff(x, 'asetrate=44100*0.9,aresample=44100,atempo=0.85,highpass=f=200,lowpass=f=5000,'
+        x = ff(x, 'asetrate=44100*0.82,aresample=44100,atempo=1.0,highpass=f=200,lowpass=f=5000,'
                   'aecho=0.8:0.8:30|420:0.6|0.25')
     return x / (np.max(np.abs(x)) + 1e-9) * 0.9
 
