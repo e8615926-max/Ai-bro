@@ -15,8 +15,8 @@ if not MOCK:
 # голос, темп, высота, ffmpeg-обработка, во сколько раз обработка растягивает время
 VOICE = {
     'main': ('ru-RU-DmitryNeural', '-6%', '-2Hz',
-             'highpass=f=60,equalizer=f=140:t=q:w=1:g=2.5,equalizer=f=4000:t=q:w=1:g=1.5,'
-             'acompressor=threshold=-20dB:ratio=3:attack=5:release=80,aecho=0.8:0.5:35:0.1', 1.0),
+             'atempo=1.12,highpass=f=60,equalizer=f=140:t=q:w=1:g=2.5,equalizer=f=4000:t=q:w=1:g=1.5,'
+             'acompressor=threshold=-20dB:ratio=3:attack=5:release=80,aecho=0.8:0.5:35:0.1', 1 / 1.12),
     'mom': ('ru-RU-SvetlanaNeural', '-15%', '-6Hz',
             'asetrate=44100*0.93,aresample=44100,highpass=f=350,lowpass=f=3200,'
             'aecho=0.8:0.7:60|120:0.35|0.2,tremolo=f=6:d=0.25', 1 / 0.93),
