@@ -11,8 +11,19 @@ rng = np.random.default_rng(7)
 MOCK = os.environ.get('MOCK')
 if not MOCK:
     sys.path.insert(0, HERE)
-    from tts_rhvoice import synth
-VOICE = {'main': ('Aleksandr', -0.18, -0.58), 'mom': ('Anna', -0.2, 0.0), 'whisper': ('Aleksandr', -0.25, -0.58)}
+    from tts_edge import synth
+# голос, темп, высота, ffmpeg-обработка, во сколько раз обработка растягивает время
+VOICE = {
+    'main': ('ru-RU-DmitryNeural', '-6%', '-2Hz',
+             'highpass=f=60,equalizer=f=140:t=q:w=1:g=2.5,equalizer=f=4000:t=q:w=1:g=1.5,'
+             'acompressor=threshold=-20dB:ratio=3:attack=5:release=80,aecho=0.8:0.5:35:0.1', 1.0),
+    'mom': ('ru-RU-SvetlanaNeural', '-15%', '-6Hz',
+            'asetrate=44100*0.93,aresample=44100,highpass=f=350,lowpass=f=3200,'
+            'aecho=0.8:0.7:60|120:0.35|0.2,tremolo=f=6:d=0.25', 1 / 0.93),
+    'whisper': ('ru-RU-DmitryNeural', '-20%', '-8Hz',
+                'asetrate=44100*0.85,aresample=44100,highpass=f=200,lowpass=f=5000,'
+                'aecho=0.8:0.8:30|420:0.6|0.25', 1 / 0.85),
+}
 
 
 def ff(data, filt):
@@ -24,27 +35,21 @@ def ff(data, filt):
 
 
 def say(text, voice):
+    """Возвращает (звук, [время начала каждого произнесённого слова])."""
     if MOCK:
-        return np.zeros(int(len(text) * 0.065 * SR))
-    wav = synth(text, *VOICE[voice])
-    with wave.open(io.BytesIO(wav)) as w:
-        sr, x = w.getframerate(), np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16) / 32768.0
-    x = ff(x, f'aresample={SR}')
-    # обрезаем тишину по краям
+        return np.zeros(int(len(text) * 0.065 * SR)), []
+    name, rate, pitch, filt, k = VOICE[voice]
+    mp3, words = synth(text, name, rate, pitch)
+    p = subprocess.run(['ffmpeg', '-v', 'error', '-i', '-', '-f', 'f32le', '-ar', str(SR), '-ac', '1', '-'],
+                       input=mp3, capture_output=True, check=True)
+    x = np.frombuffer(p.stdout, dtype=np.float32).copy()
+    x = ff(x, filt)
+    # обрезаем тишину по краям и сдвигаем времена слов
     nz = np.where(np.abs(x) > 0.01)[0]
-    x = x[max(0, nz[0] - 400): nz[-1] + 2000] if len(nz) else x
-    if voice == 'main':
-        # тембр ниже (формантный сдвиг) — голос взрослее и тяжелее
-        x = ff(x, 'asetrate=44100*0.86,aresample=44100,atempo=1.1628,'
-                  'highpass=f=60,equalizer=f=120:t=q:w=1:g=4,equalizer=f=2500:t=q:w=1:g=-2,equalizer=f=4500:t=q:w=1:g=1.5,'
-                  'acompressor=threshold=-20dB:ratio=3:attack=5:release=80,aecho=0.8:0.5:35:0.12')
-    elif voice == 'mom':
-        x = ff(x, 'asetrate=44100*0.93,aresample=44100,atempo=0.92,highpass=f=350,lowpass=f=3200,'
-                  'aecho=0.8:0.7:60|120:0.35|0.2,tremolo=f=6:d=0.25')
-    else:  # шёпот: тот же голос, двоится и уходит в тень
-        x = ff(x, 'asetrate=44100*0.82,aresample=44100,atempo=1.0,highpass=f=200,lowpass=f=5000,'
-                  'aecho=0.8:0.8:30|420:0.6|0.25')
-    return x / (np.max(np.abs(x)) + 1e-9) * 0.9
+    a0 = max(0, nz[0] - 400) if len(nz) else 0
+    x = x[a0: (nz[-1] + 2000) if len(nz) else len(x)]
+    times = [max(0.0, w[1] * k - a0 / SR) for w in words]
+    return x / (np.max(np.abs(x)) + 1e-9) * 0.9, times
 
 
 tl = json.load(open(os.path.join(HERE, 'timeline.json')))
@@ -55,13 +60,21 @@ for sc in tl['scenes']:
     for card in sc['cards']:
         words = card['text'].split()
         spoken = card.get('say', ' '.join(w.split('#')[0] for w in words))
-        a = say(spoken.replace('…', '...').replace(' —', ','), card.get('voice', 'main'))
+        a, wt = say(spoken.replace('…', '...').replace(' —', ','), card.get('voice', 'main'))
         d = len(a) / SR
         voice_track.append((t, a))
         card['t0'], card['t1'] = t, t + d
-        # слова — пропорционально длине (с запасом на начало)
-        lens = np.array([len(w.split('#')[0]) + 2 for w in words], float)
-        starts = t + 0.04 + np.concatenate([[0], np.cumsum(lens)[:-1]]) / lens.sum() * d * 0.92
+        # слова субтитров: точное время из сервиса, если число слов совпало; иначе — по длине слов
+        real = [w for w in words if any(ch.isalnum() for ch in w)]
+        if wt and len(wt) == len(real):
+            it, starts, last = iter(wt), [], t
+            for w in words:
+                if any(ch.isalnum() for ch in w):
+                    last = t + next(it)
+                starts.append(last)
+        else:
+            lens = np.array([len(w.split('#')[0]) + 2 for w in words], float)
+            starts = t + 0.04 + np.concatenate([[0], np.cumsum(lens)[:-1]]) / lens.sum() * d * 0.92
         card['words'] = [{'w': w.split('#')[0], 'c': (w.split('#') + [''])[1], 't': float(s)} for w, s in zip(words, starts)]
         t += d + card['pause']
     sc['t1'] = t - 0.15
