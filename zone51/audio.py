@@ -3,6 +3,8 @@ import math, os, wave
 import numpy as np
 from scipy.signal import butter, sosfilt, fftconvolve
 import timeline as TL
+EV = TL.EV
+SH = {n: (s, e) for n, s, e in TL.SHOTS}
 from lines import LINES
 
 SR = 44100
@@ -78,42 +80,6 @@ def reverb(x, dur=0.8, wet=0.25, tone=4000):
     return (x * (1 - wet) + y * wet).astype(np.float32)
 
 
-# ---------------- комната ----------------
-def room_bed(t0, t1, tv_level=0.0, static=False):
-    a, b = span(t0, t1)
-    n = b - a
-    bed = bp(noise(n), hi=300) * 0.06 + np.sin(2 * np.pi * 50 * np.arange(n) / SR).astype(np.float32) * 0.004
-    add(fade(bed, 0.5, 0.5), t0)
-    # часы
-    tick = bp(noise(int(0.02 * SR)), 1500, 5000) * env_ad(int(0.02 * SR), 0.001, 0.004)
-    tock = bp(noise(int(0.02 * SR)), 900, 3000) * env_ad(int(0.02 * SR), 0.001, 0.005)
-    k = 0
-    tt = math.ceil(t0)
-    while tt < t1:
-        add(tick if k % 2 == 0 else tock, tt, 0.09, -0.6)
-        tt += 1.0
-        k += 1
-    # мурлыканье кота
-    tt = np.arange(n) / SR
-    purr = bp(noise(n), 60, 400) * (0.5 + 0.5 * np.sin(2 * np.pi * 24 * tt)) * (0.6 + 0.4 * np.sin(2 * np.pi * tt / 2.6))
-    add(fade(purr.astype(np.float32), 0.5, 0.5) * 0.06, t0, pan=0.5)
-    if static:
-        s = bp(noise(n), 800, 6000) * 0.12
-        s = bp(s, hi=3500)
-        add(fade(s, 0.05, 1.2), t0, pan=-0.4)
-
-
-room_bed(0, 6.6)
-# невнятный звук телевизора за кадром (до заставки)
-a, b = span(0, 7.0)
-n = b - a
-tt = np.arange(n) / SR
-babble = bp(noise(n), 200, 1200) * (0.5 + 0.5 * np.sin(2 * np.pi * 3.1 * tt) * np.sin(2 * np.pi * 0.7 * tt)) * 0.16
-add(fade(bp(babble.astype(np.float32), hi=900), 1.0, 0.3), 0, pan=-0.7)
-room_bed(6.5, 12.2)
-
-
-# ---------------- заставка новостей ----------------
 def saw(f, n):
     t = np.arange(n) / SR
     return (2 * ((t * f) % 1) - 1).astype(np.float32)
@@ -157,100 +123,6 @@ def jingle():
     return reverb(j, 1.2, 0.2)
 
 
-J = jingle()
-ti = TL.EVENTS["intro"]
-# сначала звук из динамика телевизора, к концу наезда — полноценно
-jm = bp(J, 300, 3000)
-w = np.clip((np.arange(len(J)) / SR - 3.5) / 1.5, 0, 1).astype(np.float32)
-add(jm * (1 - w) * 0.55 + J * w * 0.75, ti)
-
-# студийная подложка
-a, b = span(12.0, TL.SHOTS[2][2])
-n = b - a
-tt = np.arange(n) / SR
-pad = (np.sin(2 * np.pi * 110 * tt) + 0.5 * np.sin(2 * np.pi * 164.8 * tt) + 0.4 * np.sin(2 * np.pi * 220.5 * tt)) * (0.6 + 0.4 * np.sin(2 * np.pi * 0.2 * tt))
-add(fade(bp(pad.astype(np.float32), hi=900) * 0.025, 1.0, 0.5), 12.0)
-# переход в прямой эфир: свуш
-wn = int(1.0 * SR)
-sw = bp(noise(wn), 400, 6000) * np.sin(np.linspace(0, np.pi, wn)) ** 2
-add(sw.astype(np.float32) * 0.35, TL.EVENTS["to_field"] - 0.4)
-add(timp(55, 2.0) * 0.6, TL.EVENTS["to_field"] + 0.2)
-
-# ---------------- поле ----------------
-F0, F1 = TL.SHOTS[3][1], TL.SHOTS[8][2]
-BOOM = TL.EVENTS["boom"]
-a, b = span(F0, F1)
-n = b - a
-tt = np.arange(n) / SR + F0
-# ветер + гул огня + треск
-wind = bp(brown(n), 80, 900) * (0.6 + 0.4 * np.sin(2 * np.pi * 0.13 * tt)) * 0.25
-roar = bp(noise(n), 40, 260) * 0.25
-crk = np.zeros(n, np.float32)
-idx = rng.choice(n, size=int(n / SR * 60), replace=False)
-crk[idx] = rng.uniform(-1, 1, len(idx))
-crk = bp(crk, 1000, 7000) * 3.0
-fire = (wind + roar + crk) * (1 + 1.2 * (tt > BOOM))
-# после взрыва — «оглушение»: ненадолго глушим окружение
-deaf = np.ones(n, np.float32)
-m = (tt > BOOM) & (tt < BOOM + 1.6)
-deaf[m] = 0.15 + 0.85 * ((tt[m] - BOOM) / 1.6) ** 2
-fire_l = bp(fire, hi=500)
-fire = fire * deaf + fire_l * (1 - deaf)
-add(fade(fire.astype(np.float32), 0.4, 0.05) * 0.5, F0)
-# сирены (две, разные фазы), громче на полицейских планах
-for k, (per, base, pan, g) in enumerate(((4.2, 700, -0.5, 0.05), (3.1, 820, 0.6, 0.04))):
-    f = base + 420 * (0.5 - 0.5 * np.cos(2 * np.pi * tt / per))
-    ph = 2 * np.pi * np.cumsum(f) / SR
-    s = (np.sin(ph) + 0.3 * np.sin(2 * ph) + 0.15 * np.sin(3 * ph)).astype(np.float32)
-    s = bp(s, 300, 4000)
-    s = reverb(s, 1.5, 0.45)
-    add(fade(s * deaf, 1.0, 0.05) * g, F0, pan=pan)
-# напряжённая музыка: низкий дрон, к взрыву нарастает
-drone = (saw(55, n) + saw(55.4, n) + 0.6 * saw(82.4, n)) / 3
-rise = np.clip((tt - TL.SHOTS[5][1]) / (BOOM - TL.SHOTS[5][1]), 0, 1) ** 2
-drone = bp(drone, hi=400) * (0.05 + 0.12 * rise) * (tt < BOOM)
-add(fade(drone.astype(np.float32), 2.0, 0.02), F0)
-# сердцебиение после взрыва
-for k in range(int((F1 - BOOM - 1.5) / 0.75)):
-    h = timp(48, 0.4)
-    add(h * 0.35, BOOM + 1.5 + k * 0.75)
-    add(h * 0.25, BOOM + 1.5 + k * 0.75 + 0.22)
-
-# шаги (идут к зоне)
-step = lambda g=1.0: bp(noise(int(0.12 * SR)), 100, 1800) * env_ad(int(0.12 * SR), 0.004, 0.03) * g
-E0 = TL.SHOTS[4][1]
-stop = TL.EVENTS["clark_in"] + 1.1
-tt_ = E0
-while tt_ < stop:
-    add(step(), tt_, 0.25, -0.2 + 0.4 * (int(tt_ * 3.2) % 2))
-    tt_ += 1 / 3.2
-# шаги полицейского
-tt_ = TL.EVENTS["clark_in"]
-while tt_ < TL.EVENTS["clark_in"] + 1.1:
-    add(step(), tt_, 0.18, 0.5)
-    tt_ += 0.32
-# рация
-for t0 in (F0 + 9.5, F0 + 17.0, TL.SHOTS[5][1] + 6.0):
-    nn = int(1.2 * SR)
-    r = bp(noise(nn), 1200, 3000) * (np.sin(2 * np.pi * 7 * np.arange(nn) / SR) > 0) * 0.15
-    add(fade(r.astype(np.float32), 0.01, 0.1), t0, 0.5, 0.4)
-
-# взрыв
-nb = int(6 * SR)
-tb = np.arange(nb) / SR
-sub = np.sin(2 * np.pi * np.cumsum(70 * np.exp(-tb * 1.2) + 25) / SR) * np.exp(-tb * 0.9)
-blast = bp(noise(nb), hi=1200) * np.exp(-tb * 1.6) + bp(noise(nb), hi=250) * np.exp(-tb * 0.6) * 0.8
-deb = np.zeros(nb, np.float32)
-idx = rng.choice(nb, size=900, replace=False)
-deb[idx] = rng.uniform(-1, 1, 900) * np.exp(-idx / SR * 0.8)
-deb = bp(deb, 800, 6000) * 2.5
-boom = (sub * 1.2 + blast * 1.4 + deb * 0.6).astype(np.float32)
-boom = np.tanh(boom * 1.5) * 0.9
-add(boom, BOOM, 1.0)
-ring = np.sin(2 * np.pi * 3600 * tb[: int(2.5 * SR)]) * np.exp(-tb[: int(2.5 * SR)] * 1.4) * 0.03
-add(ring.astype(np.float32), BOOM + 0.1)
-
-
 # рык мутантов
 def growl(dur, f0, seed):
     r = np.random.default_rng(seed)
@@ -262,14 +134,6 @@ def growl(dur, f0, seed):
     s = bp(s.astype(np.float32), 80, 1500) + bp(r.standard_normal(nn).astype(np.float32), 200, 2000) * 0.4
     e = np.sin(np.linspace(0, np.pi, nn)) ** 0.6
     return np.tanh(s * e * 2).astype(np.float32)
-
-
-G0 = TL.EVENTS["growl"]
-for k in range(14):
-    t0 = G0 + k * 0.55 + rng.uniform(0, 0.3)
-    if t0 > F1:
-        break
-    add(reverb(growl(rng.uniform(0.8, 1.6), rng.uniform(55, 110), k), 0.9, 0.35), t0, 0.22, rng.uniform(-0.8, 0.8))
 
 
 # выстрелы
@@ -284,68 +148,6 @@ def gunshot(dist=0.0):
     return np.tanh(s * 2) * (1 - 0.6 * dist)
 
 
-tsh = TL.EVENTS["shots0"]
-H0, I0 = TL.SHOTS[7][1], TL.SHOTS[8][1]
-while tsh < H0:
-    add(gunshot(), tsh, 0.6, 0.15)
-    tsh += 0.34
-for ph, pan in ((0.0, -0.7), (0.13, 0.7)):
-    k = 0
-    while True:
-        b = k * 0.27 - ph
-        k += 1
-        if b < 2.3:
-            continue
-        if BOOM + b > H0:
-            break
-        add(gunshot(0.6), BOOM + b, 0.35, pan)
-tt_ = math.ceil(H0 / 0.3) * 0.3
-while tt_ < I0:
-    add(gunshot(0.25), tt_, 0.5, 0.6)
-    tt_ += 0.3
-for k in range(9):
-    add(gunshot(0.85), I0 + 0.2 + k * 0.4 + rng.uniform(0, 0.2), 0.3, rng.uniform(-1, 1))
-
-# бег: шаги и дыхание
-tt_ = I0 - 0.3
-while tt_ < TL.EVENTS["hit"]:
-    add(step(1.4), tt_, 0.35, 0)
-    tt_ += 1 / 6.4
-for k in range(int((TL.EVENTS["hit"] - I0 + 0.4) / 0.42)):
-    nn = int(0.3 * SR)
-    br = bp(noise(nn), 500, 2500) * np.sin(np.linspace(0, np.pi, nn)) ** 2
-    add(br.astype(np.float32) * 0.12, I0 - 0.4 + k * 0.42)
-# человек-паук: шипение и визг
-S0, HIT = TL.EVENTS["spider"], TL.EVENTS["hit"]
-nn = int((HIT - S0) * SR)
-t = np.arange(nn) / SR
-hiss = bp(noise(nn), 3000, 9000) * (t / t[-1]) ** 1.5 * 0.5
-f = 900 + 1800 * (t / t[-1]) ** 2
-scr = np.sin(2 * np.pi * np.cumsum(f) / SR) * (t / t[-1]) ** 2
-scr = bp(np.tanh(scr * 3).astype(np.float32), 600, 6000) * 0.3
-add((hiss + scr).astype(np.float32), S0, 0.8, 0.3)
-add(growl(1.2, 160, 99), HIT - 0.9, 0.5)
-# удар по камере
-nn = int(0.6 * SR)
-t = np.arange(nn) / SR
-thud = (np.sin(2 * np.pi * 60 * t) * np.exp(-t * 10) + noise(nn) * np.exp(-t * 30)).astype(np.float32)
-add(np.tanh(thud * 3) * 0.9, HIT)
-
-# ---------------- помехи, «эфир прерван», финал ----------------
-s0, s1 = TL.SHOTS[9][1], TL.SHOTS[9][2]
-nn = int((s1 - s0) * SR)
-st = bp(noise(nn), 300, 9000) * 0.35
-st[: int(0.45 * SR)] *= np.linspace(0.2, 1, int(0.45 * SR))
-add(fade(st, 0.005, 0.02), s0)
-o0, o1 = TL.SHOTS[10][1], TL.SHOTS[10][2]
-nn = int((o1 - o0 - 0.15) * SR)
-beep = np.sin(2 * np.pi * 1000 * np.arange(nn) / SR).astype(np.float32) * 0.12
-add(fade(beep, 0.01, 0.05), o0 + 0.15)
-add(bp(noise(int(0.15 * SR)), 300, 9000) * 0.3, o0)
-r0, r1 = TL.SHOTS[11][1], TL.SHOTS[11][2]
-room_bed(r0, r1, static=True)
-
-
 # мяу
 def meow(dur=0.7):
     nn = int(dur * SR)
@@ -357,37 +159,361 @@ def meow(dur=0.7):
     return s * np.sin(np.pi * t / dur) ** 0.8
 
 
-add(meow() * 0.18, r0 + 2.4, pan=0.5)
 
-# ---------------- голоса ----------------
+
+def step(g=1.0, hard=False):
+    n = int(0.12 * SR)
+    return bp(noise(n), 100 if not hard else 300, 1800 if not hard else 4000) * env_ad(n, 0.004, 0.03 if not hard else 0.02) * g
+
+
+def footsteps(t0, t1, rate, g, pan=0.0, hard=False):
+    tt = t0
+    k = 0
+    while tt < t1:
+        add(step(1.0, hard), tt, g, pan + (0.1 if k % 2 else -0.1))
+        tt += 1 / rate
+        k += 1
+
+
+def knock(t0, g=0.6):
+    for k in range(3):
+        n = int(0.15 * SR)
+        tt = np.arange(n) / SR
+        s = (np.sin(2 * np.pi * 120 * tt) * np.exp(-tt * 40) + bp(noise(n), 200, 1500) * np.exp(-tt * 60) * 0.6).astype(np.float32)
+        add(reverb(s, 0.4, 0.3), t0 + k * 0.28, g, -0.5)
+
+
+def creak(t0, dur=0.8, g=0.15, f0=300):
+    n = int(dur * SR)
+    tt = np.arange(n) / SR
+    f = f0 + 120 * np.sin(2 * np.pi * 1.3 * tt) + 60 * np.sin(2 * np.pi * 7 * tt)
+    s = np.sin(2 * np.pi * np.cumsum(f) / SR) * (0.5 + 0.5 * (np.sin(2 * np.pi * 40 * tt) > 0))
+    s = bp(s.astype(np.float32), 200, 3000) * np.sin(np.pi * tt / dur)
+    add(s, t0, g)
+
+
+def thud(t0, g=0.5, f=70):
+    n = int(0.4 * SR)
+    tt = np.arange(n) / SR
+    s = (np.sin(2 * np.pi * f * tt) * np.exp(-tt * 14) + bp(noise(n), 80, 800) * np.exp(-tt * 30)).astype(np.float32)
+    add(reverb(s, 0.5, 0.25), t0, g)
+
+
+def breath(t0, dur=1.2, g=0.12, lo=400, hi=2500):
+    n = int(dur * SR)
+    s = bp(noise(n), lo, hi) * np.sin(np.linspace(0, np.pi, n)) ** 1.5
+    add(s.astype(np.float32), t0, g)
+
+
+def bed(t0, t1, g=1.0, tv=None):
+    a, b = span(t0, t1)
+    n = b - a
+    s = bp(noise(n), hi=300) * 0.06 + np.sin(2 * np.pi * 50 * np.arange(n) / SR).astype(np.float32) * 0.004
+    add(fade(s, 0.3, 0.3), t0, g)
+
+
+def clock(t0, t1, g=0.09):
+    tick = bp(noise(int(0.02 * SR)), 1500, 5000) * env_ad(int(0.02 * SR), 0.001, 0.004)
+    tock = bp(noise(int(0.02 * SR)), 900, 3000) * env_ad(int(0.02 * SR), 0.001, 0.005)
+    tt = math.ceil(t0)
+    k = 0
+    while tt < t1:
+        add(tick if k % 2 == 0 else tock, tt, g, -0.6)
+        tt += 1.0
+        k += 1
+
+
+def purr(t0, t1, g=0.06):
+    a, b = span(t0, t1)
+    n = b - a
+    tt = np.arange(n) / SR
+    s = bp(noise(n), 60, 400) * (0.5 + 0.5 * np.sin(2 * np.pi * 24 * tt)) * (0.6 + 0.4 * np.sin(2 * np.pi * tt / 2.6))
+    add(fade(s.astype(np.float32), 0.5, 0.5), t0, g, 0.5)
+
+
+def tv_babble(t0, t1, g=0.12, warm=False):
+    a, b = span(t0, t1)
+    n = b - a
+    tt = np.arange(n) / SR
+    s = bp(noise(n), 200, 1200) * (0.5 + 0.5 * np.sin(2 * np.pi * 3.1 * tt) * np.sin(2 * np.pi * 0.7 * tt))
+    if warm:   # вечернее шоу: смех и музыка из телевизора
+        s = s + bp(saw(220, n) + saw(277, n) + saw(330, n), 200, 900) * 0.08 * (np.sin(2 * np.pi * 0.25 * tt) > 0)
+    add(fade(bp(s.astype(np.float32), hi=900), 0.3, 0.3), t0, g, -0.7)
+
+
+def static_burst(t0, t1, g=0.35, ramp_in=0.0):
+    n = int((t1 - t0) * SR)
+    s = bp(noise(n), 300, 9000)
+    if ramp_in:
+        s[: int(ramp_in * SR)] *= np.linspace(0, 1, int(ramp_in * SR))
+    add(fade(s, 0.005, 0.03), t0, g)
+
+
+# ======================= 1. комната и телевизор =========================
+T_TV = SH["studio"][0]
+bed(0, T_TV + 0.2)
+clock(0, T_TV)
+purr(0, SH["tv"][1])
+tv_babble(0, EV["intro"])
+n = int(0.5 * SR)
+gulp = bp(noise(n), 200, 900) * (np.sin(np.linspace(0, 6 * np.pi, n)) > 0.3) * np.sin(np.linspace(0, np.pi, n))
+add(gulp.astype(np.float32), EV["sip"] + 0.6, 0.12)
+J = jingle()
+ti = EV["intro"]
+jm = bp(J, 300, 3000)
+w = np.clip((np.arange(len(J)) / SR - 3.5) / 1.5, 0, 1).astype(np.float32)
+add(jm * (1 - w) * 0.55 + J * w * 0.75, ti)
+
+# ======================= 2. студия ======================================
+for (s0, s1) in (SH["studio"], SH["studio2"]):
+    a, b = span(s0, s1)
+    n = b - a
+    tt = np.arange(n) / SR
+    pad = (np.sin(2 * np.pi * 110 * tt) + 0.5 * np.sin(2 * np.pi * 164.8 * tt) + 0.4 * np.sin(2 * np.pi * 220.5 * tt)) * (0.6 + 0.4 * np.sin(2 * np.pi * 0.2 * tt))
+    add(fade(bp(pad.astype(np.float32), hi=900) * 0.025, 1.0, 0.5), s0)
+wn = int(1.0 * SR)
+sw = bp(noise(wn), 400, 6000) * np.sin(np.linspace(0, np.pi, wn)) ** 2
+add(sw.astype(np.float32) * 0.35, EV["to_field"] - 0.4)
+add(timp(55, 2.0) * 0.6, EV["to_field"] + 0.2)
+
+# ======================= 3. поле ========================================
+F0, F1 = SH["report"][0], EV["hit"]
+BOOM = EV["boom"]
+a, b = span(F0, F1)
+n = b - a
+tt = np.arange(n) / SR + F0
+wind = bp(brown(n), 80, 900) * (0.6 + 0.4 * np.sin(2 * np.pi * 0.13 * tt)) * 0.25
+roar = bp(noise(n), 40, 260) * 0.25
+crk = np.zeros(n, np.float32)
+idx = rng.choice(n, size=int(n / SR * 60), replace=False)
+crk[idx] = rng.uniform(-1, 1, len(idx))
+crk = bp(crk, 1000, 7000) * 3.0
+fire = (wind + roar + crk) * (1 + 1.2 * (tt > BOOM))
+deaf = np.ones(n, np.float32)
+m = (tt > BOOM) & (tt < BOOM + 1.6)
+deaf[m] = 0.15 + 0.85 * ((tt[m] - BOOM) / 1.6) ** 2
+fire = fire * deaf + bp(fire, hi=500) * (1 - deaf)
+add(fade(fire.astype(np.float32), 0.4, 0.05) * 0.5, F0)
+for k, (per, base, pan, g) in enumerate(((4.2, 700, -0.5, 0.05), (3.1, 820, 0.6, 0.04))):
+    f = base + 420 * (0.5 - 0.5 * np.cos(2 * np.pi * tt / per))
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    s = (np.sin(ph) + 0.3 * np.sin(2 * ph) + 0.15 * np.sin(3 * ph)).astype(np.float32)
+    s = reverb(bp(s, 300, 4000), 1.5, 0.45)
+    add(fade(s * deaf, 1.0, 0.05) * g, F0, pan=pan)
+drone = (saw(55, n) + saw(55.4, n) + 0.6 * saw(82.4, n)) / 3
+rise = np.clip((tt - SH["standoff"][0]) / (BOOM - SH["standoff"][0]), 0, 1) ** 2
+drone = bp(drone, hi=400) * (0.05 + 0.12 * rise) * (tt < BOOM)
+add(fade(drone.astype(np.float32), 2.0, 0.02), F0)
+for k in range(int((F1 - BOOM - 1.5) / 0.75)):
+    h = timp(48, 0.4)
+    add(h * 0.35, BOOM + 1.5 + k * 0.75)
+    add(h * 0.25, BOOM + 1.5 + k * 0.75 + 0.22)
+footsteps(SH["walk"][0], EV["clark_in"] + 1.3, 3.2, 0.25)
+footsteps(EV["clark_in"], EV["clark_in"] + 1.3, 3.0, 0.18, 0.5)
+for t0 in (F0 + 9.5, F0 + 17.0, SH["standoff"][0] + 6.0):
+    nn = int(1.2 * SR)
+    r = bp(noise(nn), 1200, 3000) * (np.sin(2 * np.pi * 7 * np.arange(nn) / SR) > 0) * 0.15
+    add(fade(r.astype(np.float32), 0.01, 0.1), t0, 0.5, 0.4)
+# взрыв + вторичные
+nb = int(6 * SR)
+tb = np.arange(nb) / SR
+sub = np.sin(2 * np.pi * np.cumsum(70 * np.exp(-tb * 1.2) + 25) / SR) * np.exp(-tb * 0.9)
+blast = bp(noise(nb), hi=1200) * np.exp(-tb * 1.6) + bp(noise(nb), hi=250) * np.exp(-tb * 0.6) * 0.8
+deb = np.zeros(nb, np.float32)
+idx = rng.choice(nb, size=900, replace=False)
+deb[idx] = rng.uniform(-1, 1, 900) * np.exp(-idx / SR * 0.8)
+deb = bp(deb, 800, 6000) * 2.5
+boom = np.tanh((sub * 1.2 + blast * 1.4 + deb * 0.6).astype(np.float32) * 1.5) * 0.9
+add(boom, BOOM, 0.6)
+for d, g in ((0.7, 0.35), (1.3, 0.3), (2.1, 0.25)):
+    add(boom[: int(2.5 * SR)] * np.exp(-tb[: int(2.5 * SR)] * 1.0), BOOM + d, g, rng.uniform(-0.5, 0.5))
+ring = np.sin(2 * np.pi * 3600 * tb[: int(2.5 * SR)]) * np.exp(-tb[: int(2.5 * SR)] * 1.4) * 0.03
+add(ring.astype(np.float32), BOOM + 0.1)
+# микрофон падает
+thud(EV["mic_drop"] + 0.35, 0.25, 160)
+G0 = EV["growl"]
+for k in range(16):
+    t0 = G0 + k * 0.5 + rng.uniform(0, 0.3)
+    if t0 > F1:
+        break
+    add(reverb(growl(rng.uniform(0.8, 1.6), rng.uniform(55, 110), k), 0.9, 0.35), t0, 0.22, rng.uniform(-0.8, 0.8))
+tsh = EV["shots0"]
+H0, I0 = SH["flee"][0], SH["run"][0]
+while tsh < H0:
+    add(gunshot(), tsh, 0.38, 0.15)
+    tsh += 0.34
+tt_ = BOOM + 2.6
+while tt_ < I0:
+    for i in range(2):
+        add(gunshot(0.6), tt_ + i * 0.13, 0.18, -0.6 + 1.2 * i)
+    tt_ += 0.3
+tt_ = math.ceil(H0 / 0.3) * 0.3
+while tt_ < I0:
+    add(gunshot(0.25), tt_, 0.3, 0.6)
+    tt_ += 0.3
+for k in range(9):
+    add(gunshot(0.85), I0 + 0.2 + k * 0.4 + rng.uniform(0, 0.2), 0.3, rng.uniform(-1, 1))
+# свист поворота камеры
+wn = int(0.6 * SR)
+add((bp(noise(wn), 800, 6000) * np.sin(np.linspace(0, np.pi, wn)) ** 2).astype(np.float32) * 0.4, EV["whip"])
+footsteps(I0 - 0.3, F1, 6.4, 0.35, 0, True)
+for k in range(int((F1 - I0 + 0.4) / 0.42)):
+    breath(I0 - 0.4 + k * 0.42, 0.3, 0.12, 500, 2500)
+S0, HIT = EV["spider"], EV["hit"]
+nn = int((HIT - S0) * SR)
+t = np.arange(nn) / SR
+hiss = bp(noise(nn), 3000, 9000) * (t / t[-1]) ** 1.5 * 0.5
+f = 900 + 1800 * (t / t[-1]) ** 2
+scr = bp(np.tanh(np.sin(2 * np.pi * np.cumsum(f) / SR) * (t / t[-1]) ** 2 * 3).astype(np.float32), 600, 6000) * 0.3
+add((hiss + scr).astype(np.float32), S0, 0.8, 0.3)
+add(growl(1.2, 160, 99), EV["drop"], 0.5)
+thud(HIT, 0.9, 60)
+thud(HIT + 0.45, 0.7, 90)      # камера ударилась об асфальт
+nn = int(0.3 * SR)
+add(bp(noise(nn), 2000, 9000) * np.exp(-np.arange(nn) / SR * 12) * 0.5, HIT + 0.45)   # треск стекла
+
+# ======================= 4. помехи ======================================
+FA, FB = SH["fall"]
+nn = int((FB - FA) * SR)
+st = bp(noise(nn), 300, 9000) * 0.3 * np.clip(0.15 + np.arange(nn) / SR / 4.0, 0, 1)
+st *= (0.6 + 0.4 * (np.sin(2 * np.pi * 13 / (2 * np.pi) * np.arange(nn) / SR * 6) > 0.6))
+add(fade(st.astype(np.float32), 0.005, 0.02), FA)
+for k in range(3):
+    add(reverb(growl(1.4, 70 + k * 15, 200 + k), 1.0, 0.4) * 0.5, EV["growl2"] + k * 0.6, 0.3, -0.3 + 0.3 * k)
+static_burst(*SH["nosignal"], g=0.33)
+nn = int(0.4 * SR)
+add(bp(noise(nn), 300, 9000) * 0.3, SH["studio2"][0])
+
+# ======================= 5. реклама =====================================
+def ad_music(dur):
+    n = int(dur * SR)
+    out = np.zeros(n, np.float32)
+    bpm = 128
+    beat = 60 / bpm
+    prog = [(262, 330, 392), (196, 247, 294), (220, 262, 330), (175, 220, 262)]
+    for bi in range(int(dur / beat)):
+        t0 = bi * beat
+        chord = prog[(bi // 4) % 4]
+        i = int(t0 * SR)
+        L = int(beat * SR)
+        tt = np.arange(L) / SR
+        if bi % 2 == 0:   # бас
+            s = saw(chord[0] / 2, L) * np.exp(-tt * 6) * 0.5
+            out[i:i + L] += bp(s, hi=600)[: n - i]
+        st_ = sum(np.sin(2 * np.pi * f * tt) for f in chord) * np.exp(-tt * 9) * 0.18   # стаб
+        out[i + L // 2:i + L // 2 + L][: max(0, n - i - L // 2)] += st_[: max(0, n - i - L // 2)]
+        k_ = np.sin(2 * np.pi * 60 * tt * np.exp(-tt * 20)) * np.exp(-tt * 18) * 0.7   # бочка
+        out[i:i + L] += k_[: n - i]
+        if bi % 2 == 1:   # хлопок
+            cl = bp(noise(L), 1000, 6000) * np.exp(-tt * 30) * 0.4
+            out[i:i + L] += cl[: n - i]
+        mel = [523, 587, 659, 784, 659, 587, 523, 440][bi % 8]
+        m_ = (np.sin(2 * np.pi * mel * tt) + 0.3 * np.sin(4 * np.pi * mel * tt)) * np.exp(-tt * 7) * 0.12
+        out[i:i + L] += m_[: n - i]
+    return out
+
+
+A0, A1 = SH["ad"]
+music = ad_music(A1 - A0 + 3.4)
+# в комнате (отъезд от экрана) звук рекламы тише и глуше
+mt = np.arange(len(music)) / SR
+q = np.clip((mt - (A1 - A0)) / 2.6, 0, 1)
+music = music * (1 - 0.8 * q) * np.where(mt > A1 - A0 + 2.8, np.clip(1 - (mt - (A1 - A0 + 2.8)) / 0.6, 0, 1), 1)
+add(bp(music, hi=7000) * 0.5, A0)
+for k in range(5):   # хруст хлопьев
+    nn = int(0.12 * SR)
+    add((bp(noise(nn), 1500, 8000) * (rng.random(nn) > 0.7) * np.exp(-np.arange(nn) / SR * 20)).astype(np.float32), A0 + 3.8 + k * 0.14, 0.4)
+for k in range(6):   # звон блёсток
+    nn = int(0.5 * SR)
+    tt = np.arange(nn) / SR
+    add((np.sin(2 * np.pi * (2000 + k * 300) * tt) * np.exp(-tt * 8)).astype(np.float32) * 0.06, A0 + 4.4 + k * 0.18, 1, rng.uniform(-0.6, 0.6))
+nn = int(1.0 * SR)
+add((bp(noise(nn), 200, 3000) * np.exp(-np.arange(nn) / SR * 3)).astype(np.float32) * 0.2, A0 + 1.8)   # молоко
+
+# ======================= 6. комната, часть 2 =============================
+R0, R1 = SH["room2"]
+bed(SH["tv_out"][0], R1)
+clock(SH["tv_out"][0], R1)
+purr(R0, EV["meow"] - 0.5)
+tv_babble(R0, R1, 0.07, warm=True)
+add(meow(0.8) * 0.3, EV["meow"], pan=0.5)
+thud(EV["put_beer"] + 0.6, 0.2, 220)                 # кружка на подлокотник
+creak(EV["stand0"] + 0.3, 1.0, 0.12, 260)             # скрип дивана
+footsteps(EV["sasha_in"], EV["sasha_stop"], 3.0, 0.18, -0.5)
+knock(EV["knock"], 0.55)
+footsteps(EV["sasha_out"], EV["sasha_out"] + 1.4, 3.0, 0.16, -0.5)
+footsteps(EV["andrey_go"], R1, 3.2, 0.2, -0.2)
+
+# ======================= 7. прихожая ====================================
+HA0, HA1 = SH["hall"][0], SH["end_card"][1]
+bed(HA0, HA1, 0.8)
+a, b = span(HA0, SH["end_card"][0])
+nn = b - a
+hum = (np.sin(2 * np.pi * 100 * np.arange(nn) / SR) * 0.004).astype(np.float32)   # гудит лампочка
+add(hum, HA0)
+footsteps(EV["hall_walk0"], EV["hall_walk1"], 3.2, 0.22)
+creak(EV["door_open0"], 1.0, 0.18, 360)
+thud(EV["door_open0"], 0.2, 120)
+footsteps(EV["mama_in0"], EV["mama_in1"], 2.8, 0.18, 0.2, True)
+footsteps(EV["mama_go"], EV["mama_go"] + 1.6, 2.8, 0.14, 0.6, True)
+creak(EV["door_close0"], 0.7, 0.15, 330)
+thud(EV["door_close1"] - 0.05, 0.5, 90)
+breath(EV["sigh"], 1.2, 0.16, 300, 1800)
+# туалет: смыв и дверь
+nn = int(2.2 * SR)
+fl = bp(noise(nn), 200, 3000) * np.sin(np.linspace(0, np.pi, nn)) ** 0.5 * 0.2
+add(reverb(fl.astype(np.float32), 0.6, 0.3), EV["toilet0"] - 1.6, 1, -0.6)
+creak(EV["toilet0"], 0.6, 0.12, 420)
+footsteps(EV["toilet0"] + 0.4, EV["toilet1"], 3.0, 0.16, -0.4)
+# зловещий гул в конце
+C0 = EV["creep0"]
+a, b = span(C0 - 2.0, HA1)
+nn = b - a
+tt = np.arange(nn) / SR
+dr = (saw(41, nn) + saw(41.3, nn) + 0.5 * saw(61.7, nn)) / 2.5
+dr = bp(dr, hi=300) * np.clip(tt / 3, 0, 1) * 0.16
+add(fade(dr.astype(np.float32), 0.5, 2.0), C0 - 2.0)
+add(timp(40, 3.0) * 0.6, SH["end_card"][0] + 0.8)
+
+# ======================= голоса =========================================
 vbus = np.zeros((N, 2), np.float32)
-for lid, spk, _, _ in LINES:
+for lid, spk, _, segs, opt in LINES:
+    if not segs:
+        continue
     v = np.load(os.path.join(BUILD, "voice", lid + ".npy")).astype(np.float32)
     s, d = TL.LINE[lid]
+    fx = opt.get("fx")
+    gain = 1.0
+    pan = 0.0
     if spk == "eddie":
         v = reverb(v, 0.5, 0.12, 6000)
+    elif fx == "door":        # через входную дверь — глухо
+        v = reverb(bp(v, 150, 900), 0.6, 0.3)
+        gain = 1.4
+    elif fx == "radio":       # крик сквозь помехи
+        v = np.tanh(bp(v, 400, 3000) * 4) * 0.6
+        v = v * (0.6 + 0.4 * (rng.random(len(v)) > 0.1))
+        gain = 1.1
+    elif spk in ("andrey", "sasha", "mama"):
+        v = reverb(v, 0.4, 0.12, 5000)
+    elif spk == "boy":
+        v = reverb(v, 0.3, 0.1, 7000)
     else:
         v = reverb(v, 1.0, 0.16, 3500)
-    gain = 1.0
-    if lid == "c4":
-        gain = 1.15
     i = int(s * SR)
     vbus[i:i + len(v), 0] += v[: N - i] * gain
     vbus[i:i + len(v), 1] += v[: N - i] * gain
-# приглушаем фон под голосом
 venv = np.abs(vbus[:, 0])
 venv = np.convolve(venv, np.ones(4410) / 4410, "same")
 duck = 1 - 0.45 * np.clip(venv / 0.05, 0, 1)
 mix *= duck[:, None]
 mix += vbus * 0.9
-
-# уровень: голоса ~ -17 dBFS RMS, пики взрыва мягко ограничиваем
 vr = np.sqrt(np.mean(vbus[np.abs(vbus[:, 0]) > 0.01, 0] ** 2))
 mix *= 10 ** (-17 / 20) / (vr * 0.9)
 mix = np.tanh(mix * 1.1) / 1.1
 mix = np.clip(mix, -0.97, 0.97)
 out = (mix * 32767).astype(np.int16)
-with wave.open(os.path.join(BUILD, "audio_raw.wav"), "w") as w:
+with wave.open(os.path.join(BUILD, "audio.wav"), "w") as w:
     w.setnchannels(2)
     w.setsampwidth(2)
     w.setframerate(SR)

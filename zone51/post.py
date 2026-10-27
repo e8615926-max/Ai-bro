@@ -43,7 +43,7 @@ def field_overlays(t, show_lower=None):
     if on:
         c.circ(56, 186, 12, (230, 30, 30, 255))
     c.text((78, 186), "REC", 28, (255, 255, 255, 230), FONT_C, anchor="lm")
-    tc = t - 31
+    tc = max(0.0, t - 25)
     c.text((150, 186), "%02d:%02d:%02d" % (int(tc // 60), int(tc % 60), int((tc * 30) % 30)), 26, (255, 255, 255, 210), FONT_C, anchor="lm")
     for (x, y, dx, dy) in ((40, 230, 1, 1), (1040, 230, -1, 1), (40, 1780, 1, -1), (1040, 1780, -1, -1)):
         c.line([(x, y + dy * 70), (x, y), (x + dx * 70, y)], (255, 255, 255, 170), 4, joint=None)
@@ -199,3 +199,107 @@ def offair(t):
     c.text((540, 860), "ЭФИР ПРЕРВАН", 76, (255, 255, 255, 255), FONT_C, anchor="mm")
     c.text((540, 950), "Технические неполадки. Оставайтесь с нами.", 34, (220, 220, 230, 255), FONT_R, anchor="mm")
     return np.asarray(c.im.convert("RGB"), np.float32) / 255
+
+
+# --- старый телевизор -------------------------------------------------------
+def _barrel_maps(k=0.07):
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    nx, ny = (xx - W / 2) / (W / 2), (yy - H / 2) / (H / 2)
+    r2 = nx * nx + ny * ny
+    f = 1 + k * r2
+    sx = np.clip((nx * f * 0.965 + 1) * W / 2, 0, W - 1).astype(np.int32)
+    sy = np.clip((ny * f * 0.965 + 1) * H / 2, 0, H - 1).astype(np.int32)
+    # скруглённые углы кинескопа
+    ax, ay = np.abs(nx * f * 0.965), np.abs(ny * f * 0.965)
+    q = np.clip(((np.maximum(ax - 0.86, 0) / 0.14) ** 2 + (np.maximum(ay - 0.9, 0) / 0.1) ** 2), 0, 1)
+    mask = np.clip((1 - q) * 6, 0, 1) * np.clip((1 - np.maximum(ax, ay)) * 40, 0, 1)
+    return sx, sy, mask[..., None].astype(np.float32)
+
+
+_BX, _BY, _BMASK = _barrel_maps()
+_SCAN2 = (1 - 0.16 * (np.arange(H) % 3 == 0).astype(np.float32))[:, None, None]
+
+
+def oldtv(out, t, i, k=1.0):
+    """Эффект старого кинескопа: выпуклость, строки, ореол цвета, бегущая полоса, «снег», мерцание."""
+    o = out[_BY, _BX]
+    # ореол цвета (смещение и размытие каналов)
+    r = (np.roll(o[..., 0], 3, 1) + np.roll(o[..., 0], 5, 1)) * 0.5
+    b = (np.roll(o[..., 2], -3, 1) + np.roll(o[..., 2], -5, 1)) * 0.5
+    o = np.stack([r, o[..., 1], b], -1)
+    o = o * (1 - (1 - _SCAN2) * k)
+    # бегущая полоса и мерцание
+    y = int((t * 160) % (H + 300)) - 150
+    y0, y1 = max(0, y), min(H, y + 110)
+    if y1 > y0:
+        o[y0:y1] = o[y0:y1] * 1.06 + 0.025
+    rnd = random.Random(i)
+    o = o * (0.97 + 0.03 * rnd.random())
+    # редкий сбой строки
+    if rnd.random() < 0.06:
+        yy = rnd.randint(0, H - 40)
+        o[yy:yy + 20] = np.roll(o[yy:yy + 20], rnd.randint(-30, 30), 1)
+    g = GRAIN[(i * 7) % len(GRAIN)]
+    g = np.asarray(Image.fromarray(((g * 0.25 + 0.5) * 255).clip(0, 255).astype(np.uint8)).resize((W, H), Image.NEAREST), np.float32) / 255 - 0.5
+    o += g[..., None] * 0.05 * k
+    o = o * (1 - (1 - VIG) * 0.7) * _BMASK
+    return o
+
+
+# --- трещина стекла -----------------------------------------------------------
+def _crack_img(cx=600, cy=760, seed=4):
+    rnd = random.Random(seed)
+    im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    for k in range(16):
+        a = k / 16 * 2 * math.pi + rnd.uniform(-0.2, 0.2)
+        x, y = cx, cy
+        L = rnd.uniform(500, 1400)
+        pts = [(x, y)]
+        n = 9
+        for j in range(n):
+            a += rnd.uniform(-0.35, 0.35)
+            x += math.cos(a) * L / n
+            y += math.sin(a) * L / n
+            pts.append((x, y))
+            if rnd.random() < 0.35:   # ответвление
+                b = a + rnd.choice((-1, 1)) * rnd.uniform(0.5, 1.0)
+                d.line([(x, y), (x + math.cos(b) * 160, y + math.sin(b) * 160)], fill=(255, 255, 255, 150), width=2)
+        d.line(pts, fill=(20, 20, 24, 220), width=6)
+        d.line(pts, fill=(255, 255, 255, 220), width=2)
+    for r in (40, 90, 150, 230):   # концентрические трещины
+        pts = []
+        for k in range(24):
+            a = k / 24 * 2 * math.pi
+            rr = r * rnd.uniform(0.85, 1.15)
+            pts.append((cx + math.cos(a) * rr, cy + math.sin(a) * rr))
+        for k in range(24):
+            if rnd.random() < 0.7:
+                d.line([pts[k], pts[(k + 1) % 24]], fill=(255, 255, 255, 170), width=2)
+    d.ellipse([cx - 30, cy - 30, cx + 30, cy + 30], fill=(255, 255, 255, 90))
+    return im
+
+
+CRACK = _crack_img()
+
+
+def watermark():
+    c = Image.new("RGBA", (W, 120), (0, 0, 0, 0))
+    d = ImageDraw.Draw(c)
+    f = font(34, "/usr/share/fonts/opentype/inter/InterDisplay-Light.otf")
+    txt = "ELDAR COMPANY"
+    sp = 9
+    tw = sum(f.getlength(ch) for ch in txt) + sp * (len(txt) - 1)
+    x = W / 2 - tw / 2
+    y = 46
+    for ch in txt:
+        d.text((x, y), ch, font=f, fill=(255, 255, 255, 140), anchor="lm")
+        x += f.getlength(ch) + sp
+    d.line([(W / 2 - tw / 2 - 70, y), (W / 2 - tw / 2 - 18, y)], fill=(255, 255, 255, 110), width=2)
+    d.line([(W / 2 + tw / 2 + 18, y), (W / 2 + tw / 2 + 70, y)], fill=(255, 255, 255, 110), width=2)
+    d.ellipse([W / 2 - tw / 2 - 12, y - 3, W / 2 - tw / 2 - 6, y + 3], fill=(255, 255, 255, 140))
+    d.ellipse([W / 2 + tw / 2 + 6, y - 3, W / 2 + tw / 2 + 12, y + 3], fill=(255, 255, 255, 140))
+    return c
+
+
+WATERMARK = watermark()

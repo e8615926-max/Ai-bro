@@ -10,67 +10,111 @@ KM = 1.6                                   # пикселей мастер-ка�
 HOR = 1000                                 # линия горизонта
 
 
+def wheel(c, x, y, r):
+    c.circ(x, y, r, (12, 12, 14, 255))
+    c.circ(x, y, r * 0.58, (70, 72, 78, 255))
+    c.circ(x, y, r * 0.3, (150, 150, 156, 255))
+    for k in range(5):
+        a = k / 5 * 2 * math.pi
+        c.line([(x, y), (x + math.cos(a) * r * 0.5, y + math.sin(a) * r * 0.5)], (40, 40, 44, 255), max(1, r * 0.1))
+
+
 def police_car(c, x, y, sc, facing=1, text="ПОЛИЦИЯ"):
-    """Машина сбоку. (x,y) — центр низа колёс. Возвращает позиции мигалок (мир)."""
+    """Машина сбоку. (x,y) — центр низа колёс. Возвращает огни: мигалки r/b и фары w (с направлением)."""
     f = facing
-    L = 260 * sc
-    hh = 70 * sc
-    body = [(x - L / 2, y - 22 * sc), (x - L / 2, y - hh + 8 * sc), (x - L * 0.3 * f, y - hh), (x - L * 0.18 * f, y - hh - 52 * sc),
-            (x + L * 0.2 * f, y - hh - 52 * sc), (x + L * 0.32 * f, y - hh), (x + L / 2, y - hh + 12 * sc), (x + L / 2, y - 22 * sc)]
-    c.poly(body, (18, 18, 22, 255))
-    c.poly([(x - L * 0.3 * f, y - hh), (x + L * 0.32 * f, y - hh), (x + L / 2, y - hh + 12 * sc), (x + L / 2, y - 40 * sc), (x - L / 2, y - 40 * sc), (x - L / 2, y - hh + 8 * sc)],
-           (190, 190, 196, 255))
-    c.poly([(x - L * 0.25 * f, y - hh - 2 * sc), (x - L * 0.15 * f, y - hh - 46 * sc), (x + L * 0.17 * f, y - hh - 46 * sc), (x + L * 0.27 * f, y - hh - 2 * sc)], (40, 50, 70, 255))
-    c.line([(x + 0.01 * L * f, y - hh - 46 * sc), (x + 0.01 * L * f, y - hh)], (18, 18, 22, 255), 6 * sc)
-    c.text((x, y - 56 * sc), text, 20 * sc, (20, 30, 70, 255), FONT_C, anchor="mm")
-    for wx in (x - L * 0.32, x + L * 0.32):
-        c.circ(wx, y - 16 * sc, 24 * sc, (10, 10, 12, 255))
-        c.circ(wx, y - 16 * sc, 11 * sc, (90, 90, 96, 255))
-    by = y - hh - 58 * sc
-    c.rect((x - 46 * sc, by - 6 * sc, x + 46 * sc, by + 8 * sc), (30, 30, 34, 255), r=4 * sc)
-    c.rect((x - 44 * sc, by - 4 * sc, x - 2 * sc, by + 6 * sc), (220, 40, 50, 255))
-    c.rect((x + 2 * sc, by - 4 * sc, x + 44 * sc, by + 6 * sc), (40, 90, 240, 255))
-    # фары
-    c.circ(x + L / 2 * f - 6 * sc * f, y - 48 * sc, 7 * sc, (255, 240, 200, 255))
-    return [((x - 24 * sc, by), "r", sc), ((x + 24 * sc, by), "b", sc)]
+    L = 270 * sc
+    hh = 66 * sc
+    c.ell((x - L * 0.6, y - 10 * sc, x + L * 0.6, y + 14 * sc), (0, 0, 0, 120))
+    body = [(x - L / 2, y - 24 * sc), (x - L / 2 + 4 * sc, y - hh + 6 * sc), (x - L * 0.32 * f, y - hh), (x - L * 0.2 * f, y - hh - 50 * sc),
+            (x + L * 0.18 * f, y - hh - 50 * sc), (x + L * 0.33 * f, y - hh + 2 * sc), (x + L / 2, y - hh + 14 * sc), (x + L / 2, y - 24 * sc)]
+    c.poly(body, (16, 16, 20, 255))
+    c.poly([(x - L * 0.32 * f, y - hh), (x + L * 0.33 * f, y - hh + 2 * sc), (x + L / 2, y - hh + 14 * sc), (x + L / 2, y - 42 * sc), (x - L / 2, y - 42 * sc), (x - L / 2 + 4 * sc, y - hh + 6 * sc)],
+           (200, 200, 206, 255))
+    c.poly([(x - L * 0.27 * f, y - hh - 2 * sc), (x - L * 0.17 * f, y - hh - 44 * sc), (x - 0.02 * L * f, y - hh - 44 * sc), (x - 0.02 * L * f, y - hh - 2 * sc)], (50, 62, 86, 255))
+    c.poly([(x + 0.02 * L * f, y - hh - 2 * sc), (x + 0.02 * L * f, y - hh - 44 * sc), (x + L * 0.15 * f, y - hh - 44 * sc), (x + L * 0.28 * f, y - hh - 2 * sc)], (50, 62, 86, 255))
+    c.line([(x - L * 0.12 * f, y - hh - 40 * sc), (x - L * 0.05 * f, y - hh - 8 * sc)], (140, 160, 190, 255), 3 * sc)
+    c.line([(x - L / 2, y - 52 * sc), (x + L / 2, y - 52 * sc)], (30, 60, 150, 255), 6 * sc)
+    c.text((x, y - 62 * sc), text, 18 * sc, (20, 30, 80, 255), FONT_C, anchor="mm")
+    c.line([(x + 0.0 * L, y - hh + 2 * sc), (x + 0.0 * L, y - 26 * sc)], (120, 120, 128, 255), 2 * sc)
+    for wx in (x - L * 0.31, x + L * 0.31):
+        c.ell((wx - 30 * sc, y - 46 * sc, wx + 30 * sc, y - 8 * sc), (16, 16, 20, 255))
+        wheel(c, wx, y - 16 * sc, 23 * sc)
+    by = y - hh - 56 * sc
+    c.rect((x - 48 * sc, by - 6 * sc, x + 48 * sc, by + 8 * sc), (30, 30, 34, 255), r=4 * sc)
+    c.rect((x - 46 * sc, by - 4 * sc, x - 2 * sc, by + 6 * sc), (230, 40, 50, 255))
+    c.rect((x + 2 * sc, by - 4 * sc, x + 46 * sc, by + 6 * sc), (40, 90, 240, 255))
+    hx = x + (L / 2 - 6 * sc) * f
+    c.ell((hx - 8 * sc, y - 56 * sc, hx + 8 * sc, y - 42 * sc), (255, 246, 210, 255))
+    c.rect((x - (L / 2) * f - 4 * sc * f, y - 56 * sc, x - (L / 2 - 8 * sc) * f, y - 44 * sc), (200, 20, 20, 255))
+    return [((x - 24 * sc, by), "r", sc), ((x + 24 * sc, by), "b", sc), ((hx, y - 49 * sc), "w" if f > 0 else "wl", sc)]
 
 
 def fire_truck(c, x, y, sc):
-    L = 380 * sc
-    c.rect((x - L / 2, y - 120 * sc, x + L / 2, y - 20 * sc), (150, 20, 20, 255), r=6 * sc)
-    c.rect((x + L / 2 - 90 * sc, y - 160 * sc, x + L / 2, y - 60 * sc), (170, 24, 24, 255), r=10 * sc)
-    c.rect((x + L / 2 - 80 * sc, y - 150 * sc, x + L / 2 - 10 * sc, y - 110 * sc), (40, 50, 70, 255))
-    c.line([(x - L / 2, y - 130 * sc), (x + L / 2 - 100 * sc, y - 150 * sc)], (200, 200, 200, 255), 6 * sc)
-    for k in range(8):
-        xx = x - L / 2 + k * (L - 100 * sc) / 7
-        c.line([(xx, y - 128 * sc), (xx, y - 148 * sc)], (200, 200, 200, 255), 3 * sc)
-    c.rect((x - L / 2, y - 70 * sc, x + L / 2, y - 60 * sc), (230, 230, 230, 255))
-    for wx in (x - L * 0.32, x + L * 0.2, x + L * 0.38):
-        c.circ(wx, y - 16 * sc, 26 * sc, (10, 10, 12, 255))
-    return [((x + L / 2 - 60 * sc, y - 166 * sc), "r", sc), ((x + L / 2 - 30 * sc, y - 166 * sc), "r", sc)]
+    """Пожарная машина: кабина, отсеки, лестница, катушка рукава, отражающие полосы."""
+    L = 420 * sc
+    red, dred = (176, 24, 24, 255), (130, 16, 16, 255)
+    c.ell((x - L * 0.6, y - 10 * sc, x + L * 0.6, y + 16 * sc), (0, 0, 0, 120))
+    c.rect((x - L / 2, y - 140 * sc, x + L / 2 - 110 * sc, y - 24 * sc), red, r=6 * sc)
+    for k in range(4):
+        x0 = x - L / 2 + 10 * sc + k * 70 * sc
+        c.rect((x0, y - 128 * sc, x0 + 62 * sc, y - 50 * sc), dred, r=4 * sc)
+        c.line([(x0 + 8 * sc, y - 90 * sc), (x0 + 54 * sc, y - 90 * sc)], (200, 200, 200, 255), 2 * sc)
+    c.circ(x + L / 2 - 150 * sc, y - 92 * sc, 32 * sc, (60, 60, 64, 255))           # катушка рукава
+    c.circ(x + L / 2 - 150 * sc, y - 92 * sc, 22 * sc, (200, 190, 150, 255))
+    # кабина
+    c.poly([(x + L / 2 - 110 * sc, y - 24 * sc), (x + L / 2 - 110 * sc, y - 170 * sc), (x + L / 2 - 30 * sc, y - 170 * sc), (x + L / 2, y - 120 * sc), (x + L / 2, y - 24 * sc)], red)
+    c.poly([(x + L / 2 - 96 * sc, y - 156 * sc), (x + L / 2 - 36 * sc, y - 156 * sc), (x + L / 2 - 14 * sc, y - 118 * sc), (x + L / 2 - 96 * sc, y - 118 * sc)], (60, 76, 100, 255))
+    c.rect((x + L / 2 - 104 * sc, y - 110 * sc, x + L / 2 - 60 * sc, y - 40 * sc), dred, r=4 * sc)
+    c.ell((x + L / 2 - 14 * sc, y - 70 * sc, x + L / 2 + 2 * sc, y - 54 * sc), (255, 246, 210, 255))
+    # лестница
+    c.line([(x - L / 2 - 20 * sc, y - 150 * sc), (x + L / 2 - 120 * sc, y - 168 * sc)], (210, 210, 214, 255), 6 * sc)
+    c.line([(x - L / 2 - 20 * sc, y - 162 * sc), (x + L / 2 - 120 * sc, y - 180 * sc)], (210, 210, 214, 255), 6 * sc)
+    for k in range(12):
+        xx = x - L / 2 - 14 * sc + k * (L - 110 * sc) / 11
+        c.line([(xx, y - 150 * sc - k * 1.6 * sc), (xx, y - 164 * sc - k * 1.6 * sc)], (210, 210, 214, 255), 3 * sc)
+    # отражающие полосы
+    c.rect((x - L / 2, y - 46 * sc, x + L / 2, y - 36 * sc), (240, 230, 120, 255))
+    c.rect((x - L / 2, y - 34 * sc, x + L / 2, y - 28 * sc), (240, 240, 240, 255))
+    for wx in (x - L * 0.36, x - L * 0.18, x + L * 0.34):
+        wheel(c, wx, y - 16 * sc, 26 * sc)
+    lb = y - 178 * sc
+    c.rect((x + L / 2 - 100 * sc, lb - 6 * sc, x + L / 2 - 40 * sc, lb + 6 * sc), (40, 40, 44, 255), r=4 * sc)
+    return [((x + L / 2 - 86 * sc, lb), "r", sc), ((x + L / 2 - 54 * sc, lb), "r2", sc), ((x + L / 2 - 6 * sc, y - 62 * sc), "w", sc)]
 
 
 def ambulance(c, x, y, sc):
     L = 300 * sc
-    c.rect((x - L / 2, y - 150 * sc, x + L / 4, y - 20 * sc), (236, 236, 236, 255), r=8 * sc)
-    c.poly([(x + L / 4, y - 110 * sc), (x + L / 2 - 20 * sc, y - 100 * sc), (x + L / 2, y - 60 * sc), (x + L / 2, y - 20 * sc), (x + L / 4, y - 20 * sc)], (236, 236, 236, 255))
+    c.ell((x - L * 0.6, y - 10 * sc, x + L * 0.6, y + 14 * sc), (0, 0, 0, 120))
+    c.rect((x - L / 2, y - 150 * sc, x + L / 4, y - 24 * sc), (236, 236, 236, 255), r=8 * sc)
+    c.poly([(x + L / 4, y - 110 * sc), (x + L / 2 - 20 * sc, y - 100 * sc), (x + L / 2, y - 60 * sc), (x + L / 2, y - 24 * sc), (x + L / 4, y - 24 * sc)], (236, 236, 236, 255))
+    c.poly([(x + L / 4 + 8 * sc, y - 100 * sc), (x + L / 2 - 26 * sc, y - 94 * sc), (x + L / 2 - 10 * sc, y - 64 * sc), (x + L / 4 + 8 * sc, y - 64 * sc)], (60, 76, 100, 255))
     c.rect((x - L / 2, y - 80 * sc, x + L / 2, y - 66 * sc), (220, 40, 40, 255))
     c.rect((x - 70 * sc, y - 130 * sc, x - 40 * sc, y - 100 * sc), (220, 40, 40, 255))
     c.rect((x - 85 * sc, y - 120 * sc, x - 25 * sc, y - 110 * sc), (220, 40, 40, 255))
+    c.text((x - L * 0.1, y - 50 * sc), "СКОРАЯ", 18 * sc, (220, 40, 40, 255), FONT_C, anchor="mm")
     for wx in (x - L * 0.32, x + L * 0.3):
-        c.circ(wx, y - 16 * sc, 24 * sc, (10, 10, 12, 255))
-    return [((x - L / 2 + 20 * sc, y - 158 * sc), "r", sc), ((x + L / 4 - 20 * sc, y - 158 * sc), "b", sc)]
+        wheel(c, wx, y - 16 * sc, 22 * sc)
+    return [((x - L / 2 + 20 * sc, y - 158 * sc), "r", sc), ((x + L / 4 - 20 * sc, y - 158 * sc), "b", sc), ((x + L / 2 - 4 * sc, y - 50 * sc), "w", sc)]
 
 
 def news_van(c, x, y, sc):
-    L = 320 * sc
-    c.rect((x - L / 2, y - 170 * sc, x + L / 2, y - 20 * sc), (230, 230, 236, 255), r=14 * sc)
-    c.rect((x - L / 2, y - 100 * sc, x + L / 2, y - 60 * sc), (200, 20, 30, 255))
-    c.text((x, y - 80 * sc), "НОВОСТИ ДНЯ", 24 * sc, (255, 255, 255, 255), FONT_C, anchor="mm")
-    c.line([(x - 40 * sc, y - 170 * sc), (x - 40 * sc, y - 230 * sc)], (160, 160, 170, 255), 6 * sc)
-    c.ell((x - 100 * sc, y - 290 * sc, x + 20 * sc, y - 210 * sc), (220, 220, 230, 255))
-    for wx in (x - L * 0.32, x + L * 0.32):
-        c.circ(wx, y - 16 * sc, 24 * sc, (10, 10, 12, 255))
+    """Фургон «Новостей дня» с тарелкой спутниковой связи."""
+    L = 340 * sc
+    c.ell((x - L * 0.6, y - 10 * sc, x + L * 0.6, y + 14 * sc), (0, 0, 0, 120))
+    c.poly([(x - L / 2, y - 24 * sc), (x - L / 2, y - 180 * sc), (x + L / 2 - 70 * sc, y - 180 * sc), (x + L / 2 - 20 * sc, y - 110 * sc), (x + L / 2, y - 100 * sc), (x + L / 2, y - 24 * sc)], (236, 236, 242, 255))
+    c.poly([(x + L / 2 - 76 * sc, y - 170 * sc), (x + L / 2 - 30 * sc, y - 110 * sc), (x + L / 2 - 76 * sc, y - 110 * sc)], (60, 76, 100, 255))
+    c.rect((x - L / 2 + 20 * sc, y - 168 * sc, x - L / 2 + 80 * sc, y - 130 * sc), (60, 76, 100, 255), r=4 * sc)
+    c.rect((x - L / 2, y - 110 * sc, x + L / 2, y - 66 * sc), (200, 20, 30, 255))
+    c.rect((x - L / 2, y - 66 * sc, x + L / 2, y - 58 * sc), (255, 210, 80, 255))
+    c.rect((x - 60 * sc, y - 106 * sc, x - 20 * sc, y - 70 * sc), (255, 255, 255, 255), r=4 * sc)
+    c.text((x + 30 * sc, y - 88 * sc), "НОВОСТИ ДНЯ", 22 * sc, (255, 255, 255, 255), FONT_C, anchor="mm")
+    c.line([(x - 40 * sc, y - 180 * sc), (x - 40 * sc, y - 250 * sc)], (160, 160, 170, 255), 6 * sc)
+    c.ell((x - 110 * sc, y - 320 * sc, x + 20 * sc, y - 230 * sc), (226, 226, 236, 255))
+    c.ell((x - 96 * sc, y - 308 * sc, x + 6 * sc, y - 242 * sc), (200, 200, 212, 255))
+    c.line([(x - 44 * sc, y - 276 * sc), (x - 10 * sc, y - 300 * sc)], (120, 120, 130, 255), 4 * sc)
+    for wx in (x - L * 0.3, x + L * 0.3):
+        wheel(c, wx, y - 16 * sc, 24 * sc)
+    return [((x + L / 2 - 4 * sc, y - 50 * sc), "w", sc), ((x - 40 * sc, y - 186 * sc), "o", sc)]
 
 
 def barricade(c, x, y, sc):
@@ -164,8 +208,15 @@ def draw_world(c, rnd):
             c.line([(x, 1149), (x + 14, 1147)], (20, 20, 20, 255), 6)
     for x in (-200, 380, 700, 1300):
         c.line([(x, 1130), (x, 1200)], (200, 200, 200, 255), 6)
+    lights += police_car(c, 200, 1070, 0.42, 1)
+    lights += police_car(c, 1180, 1085, 0.42, -1)
     lights += police_car(c, 60, 1230, 1.0, 1)
     lights += police_car(c, 1040, 1250, 1.05, -1)
+    barricade(c, 470, 1080, 0.4)
+    barricade(c, 620, 1082, 0.4)
+    # кровь и следы на дороге у ворот
+    for k in range(5):
+        c.ell((520 + k * 14, 1050 + k * 3, 540 + k * 16, 1058 + k * 3), (90, 10, 10, 200))
     barricade(c, 300, 1200, 0.8)
     barricade(c, 800, 1210, 0.8)
     return lights
@@ -298,14 +349,30 @@ class Zone:
         """Мигалки полицейских машин (аддитивно)."""
         ph = t * 3.0
         for (x, y), col, sc in self.lights:
-            on = (math.sin(ph * math.pi * 2 + (0 if col == "r" else math.pi)) > 0)
+            X, Y = (x - X0) * k, (y - Y0) * k
+            if col in ("w", "wl"):
+                r = int(46 * sc * k)
+                if r >= 3:
+                    add_over(out, _glow(r, (255, 240, 200)), int(X - r), int(Y - r), 1.0)
+                    bm = _beam(int(420 * sc * k), int(120 * sc * k), col == "wl")
+                    if bm is not None:
+                        bx = int(X - (bm.shape[1] if col == "wl" else 0))
+                        add_over(out, bm, bx, int(Y - bm.shape[0] / 2), 0.35)
+                continue
+            if col == "o":
+                on = (t * 1.5) % 1 < 0.5
+                if on:
+                    r = int(30 * sc * k)
+                    add_over(out, _glow(max(4, r), (255, 160, 40)), int(X - r), int(Y - r), 1.0)
+                continue
+            ofs = {"r": 0, "b": math.pi, "r2": math.pi}[col]
+            on = (math.sin(ph * math.pi * 2 + ofs) > 0)
             if not on:
                 continue
-            X, Y = (x - X0) * k, (y - Y0) * k
             r = int(110 * sc * k * scale)
             if r < 4 or X < -r or X > W + r or Y < -r or Y > H + r:
                 continue
-            g = _glow(r, (255, 40, 50) if col == "r" else (50, 100, 255))
+            g = _glow(r, (50, 100, 255) if col == "b" else (255, 40, 50))
             add_over(out, g, int(X - r), int(Y - r), 0.9)
         return out
 
@@ -324,3 +391,24 @@ def _glow(r, col):
     if k not in _gcache:
         _gcache[k] = glow_sprite(r, col, 2.0)
     return _gcache[k]
+
+
+_bcache = {}
+
+
+def _beam(length, width, left=False):
+    """Конус света фар (аддитивный спрайт)."""
+    length = max(8, int(length / 8) * 8)
+    width = max(8, int(width / 8) * 8)
+    if length < 10:
+        return None
+    key = (length, width, left)
+    if key not in _bcache:
+        yy, xx = np.mgrid[0:width * 2, 0:length].astype(np.float32)
+        u = xx / length
+        half = width * (0.15 + 0.85 * u)
+        v = np.abs(yy - width) / np.maximum(half, 1)
+        a = np.clip(1 - v, 0, 1) ** 1.5 * (1 - u) ** 1.2
+        b = a[..., None] * np.array([1.0, 0.95, 0.8], np.float32)
+        _bcache[key] = b[:, ::-1] if left else b
+    return _bcache[key]

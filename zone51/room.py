@@ -1,31 +1,35 @@
-"""Сцена 1 и финал: советская квартира ночью, Андрей на диване, рыжий кот, фото с братом Сашей."""
+"""Квартира Андрея: широкий мир (диван, ковёр, фото, часы, сервант, дверной проём в коридор).
+Персонажи и кот рисуются покадрово, затем вся картинка освещается светом телевизора и коридора."""
 import math, random
 import numpy as np
 from PIL import Image, ImageFilter
-from gfx import Cv, spline, to_f, radial, ease, smooth_noise, font, FONT_SERIF, FONT_R, glow_sprite, add_over
+from gfx import Cv, to_f, to_im, radial, ease, smooth_noise, font, FONT_SERIF, FONT_R, glow_sprite, add_over, alpha_over
+import human as Hm
+import cast as C
+import timeline as TL
 
 W, H = 1080, 1920
-WS = 1.2            # мир больше кадра -> наезд камеры
-SS = 2              # суперсэмплинг
-S = WS * SS
+X0W, X1W, Y0W, Y1W = -1000, 1080, -200, 2100      # границы мира
+KS = 1.6                                         # пикселей фона на единицу мира
+AS = 2
+SEAT_Y = 1180
+DOOR = (-640, 720, -380, 1380)                   # дверной проём
 
 
-def wallpaper(c):
-    c.rect((0, 0, W, 1380), (186, 160, 118, 255))
-    for i, x in enumerate(range(0, W, 54)):
+def wallpaper(c, x0=X0W, x1=X1W, y0=Y0W, y1=1380):
+    c.rect((x0, y0, x1, y1), (186, 160, 118, 255))
+    for i, x in enumerate(range(int(x0), int(x1), 54)):
         if i % 2 == 0:
-            c.rect((x, 0, x + 27, 1380), (176, 150, 110, 255))
-    rnd = random.Random(3)
-    for row, y in enumerate(range(40, 1380, 96)):
-        for col, x in enumerate(range(27 if row % 2 else 0, W + 54, 108)):
-            c.poly([(x, y - 22), (x + 14, y), (x, y + 22), (x - 14, y)], (140, 110, 74, 255))
-            c.circ(x, y, 5, (196, 172, 128, 255))
+            c.rect((x, y0, x + 27, y1), (178, 152, 112, 255))
+    for row, y in enumerate(range(int(y0) + 40, int(y1), 96)):
+        for x in range(int(x0) + (27 if row % 2 else 0), int(x1) + 54, 108):
+            c.poly([(x, y - 22), (x + 14, y), (x, y + 22), (x - 14, y)], (146, 116, 80, 255))
+            c.circ(x, y, 5, (198, 174, 130, 255))
             for dx in (-22, 22):
-                c.circ(x + dx, y + 30, 4, (150, 120, 84, 255))
-    # пятна старости
-    for _ in range(40):
-        x, y, r = rnd.uniform(0, W), rnd.uniform(0, 1380), rnd.uniform(20, 90)
-        c.circ(x, y, r, (120, 100, 70, 14))
+                c.circ(x + dx, y + 30, 4, (156, 126, 88, 255))
+    # потолочный плинтус
+    c.rect((x0, y0, x1, y0 + 70), (220, 214, 200, 255))
+    c.rect((x0, y0 + 70, x1, y0 + 84), (190, 182, 168, 255))
 
 
 def carpet(c, x0, y0, x1, y1):
@@ -33,236 +37,100 @@ def carpet(c, x0, y0, x1, y1):
     c.rect((x0, y0, x1, y1), (30, 34, 70, 255))
     c.rect((x0 + 22, y0 + 22, x1 - 22, y1 - 22), (200, 160, 70, 255))
     c.rect((x0 + 30, y0 + 30, x1 - 30, y1 - 30), (120, 26, 30, 255))
-    # бордюр с ромбиками
     for x in range(int(x0 + 40), int(x1 - 30), 34):
         for y in (y0 + 12, y1 - 12):
             c.poly([(x, y - 8), (x + 9, y), (x, y + 8), (x - 9, y)], (180, 40, 40, 255))
     for y in range(int(y0 + 40), int(y1 - 30), 34):
         for x in (x0 + 12, x1 - 12):
             c.poly([(x, y - 8), (x + 9, y), (x, y + 8), (x - 9, y)], (180, 40, 40, 255))
-    # решётка ромбов
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    step = 70
     for i in range(-8, 9):
         for j in range(-6, 7):
-            x, y = cx + i * step, cy + j * step
+            x, y = cx + i * 70, cy + j * 70
             if x0 + 60 < x < x1 - 60 and y0 + 60 < y < y1 - 60:
                 k = (i + j) % 2
-                col = (150, 34, 36, 255) if k else (95, 18, 24, 255)
-                c.poly([(x, y - 30), (x + 30, y), (x, y + 30), (x - 30, y)], col)
+                c.poly([(x, y - 30), (x + 30, y), (x, y + 30), (x - 30, y)], (150, 34, 36, 255) if k else (95, 18, 24, 255))
                 c.poly([(x, y - 10), (x + 10, y), (x, y + 10), (x - 10, y)], (210, 170, 90, 255) if k else (40, 46, 90, 255))
-    # центральный медальон
     for r, col in ((210, (30, 34, 70, 255)), (190, (200, 160, 70, 255)), (175, (140, 28, 32, 255)), (120, (230, 205, 150, 255)),
                    (105, (40, 46, 90, 255)), (70, (180, 40, 40, 255)), (40, (220, 180, 90, 255)), (16, (30, 34, 70, 255))):
         rr = r * 0.85
         c.poly([(cx, cy - rr * 1.25), (cx + rr * 0.5, cy - rr * 0.5), (cx + rr, cy), (cx + rr * 0.5, cy + rr * 0.5),
                 (cx, cy + rr * 1.25), (cx - rr * 0.5, cy + rr * 0.5), (cx - rr, cy), (cx - rr * 0.5, cy - rr * 0.5)], col)
-    # угловые розетки
     for qx, qy in ((x0 + 110, y0 + 110), (x1 - 110, y0 + 110), (x0 + 110, y1 - 110), (x1 - 110, y1 - 110)):
         for r, col in ((46, (200, 160, 70, 255)), (36, (30, 34, 70, 255)), (20, (180, 40, 40, 255))):
             c.poly([(qx, qy - r), (qx + r, qy), (qx, qy + r), (qx - r, qy)], col)
-    # бахрома
     for x in range(int(x0), int(x1), 7):
         c.line([(x, y1), (x + 1, y1 + 18)], (210, 190, 150, 255), 2)
 
 
 def photo(c, x0, y0, x1, y1):
+    """Фото братьев: цветное, выцветшее, нарисовано тем же ригом."""
     c.rect((x0 + 10, y0 + 12, x1 + 10, y1 + 14), (40, 30, 20, 110))
-    c.rect((x0, y0, x1, y1), (92, 56, 30, 255))
-    c.rect((x0 + 8, y0 + 8, x1 - 8, y1 - 8), (130, 84, 46, 255))
-    c.rect((x0 + 20, y0 + 20, x1 - 20, y1 - 20), (232, 222, 196, 255))
-    px0, py0, px1, py1 = x0 + 36, y0 + 36, x1 - 36, y1 - 70
-    c.rect((px0, py0, px1, py1), (196, 170, 128, 255))
-    # фон фото: небо, деревья, речка
-    c.rect((px0, py0, px1, py0 + (py1 - py0) * 0.55), (214, 196, 160, 255))
-    for i in range(7):
-        x = px0 + i * (px1 - px0) / 6
-        c.ell((x - 24, py0 + 40, x + 24, py0 + 110), (150, 126, 90, 255))
-    c.rect((px0, py0 + (py1 - py0) * 0.62, px1, py1), (176, 150, 110, 255))
-    mid = (px0 + px1) / 2
-    # Андрей (слева) и Саша (справа, повыше)
-    for cxp, top, hair, shirt, tall in ((mid - 38, py0 + 70, (70, 50, 34, 255), (110, 90, 70, 255), 0),
-                                        (mid + 40, py0 + 56, (150, 118, 74, 255), (140, 120, 96, 255), 1)):
-        hr = 24
-        c.poly([(cxp - 46, py1), (cxp - 44, top + 78), (cxp - 20, top + 62), (cxp + 20, top + 62), (cxp + 44, top + 78), (cxp + 46, py1)], shirt, smooth=False)
-        c.rect((cxp - 8, top + 46, cxp + 8, top + 66), (196, 160, 120, 255))
-        c.ell((cxp - hr, top, cxp + hr, top + 56), (206, 172, 132, 255))
-        c.ell((cxp - hr - 2, top - 4, cxp + hr + 2, top + 26), hair)
-        c.circ(cxp - 9, top + 28, 3, (60, 40, 30, 255))
-        c.circ(cxp + 9, top + 28, 3, (60, 40, 30, 255))
-        c.arc((cxp - 10, top + 30, cxp + 10, top + 46), 20, 160, (120, 70, 60, 255), 2)
-    # рука Саши на плече Андрея
-    c.line([(mid + 10, py0 + 150), (mid - 30, py0 + 140), (mid - 66, py0 + 146)], (140, 120, 96, 255), 14, smooth=True)
-    # сепия-виньетка
-    c.text(((x0 + x1) / 2, y1 - 44), "Андрей и Саша", 22, (70, 50, 34, 255), FONT_SERIF, anchor="mm")
-    c.text(((x0 + x1) / 2, y1 - 22), "1989", 16, (100, 76, 50, 255), FONT_R, anchor="mm")
-
-
-def clock(c, cx, cy, r):
-    c.circ(cx + 6, cy + 8, r, (40, 30, 20, 90))
-    c.circ(cx, cy, r, (110, 66, 36, 255))
-    c.circ(cx, cy, r - 10, (236, 226, 200, 255))
-    for i in range(12):
-        a = i / 12 * 2 * math.pi
-        c.line([(cx + math.sin(a) * (r - 22), cy - math.cos(a) * (r - 22)), (cx + math.sin(a) * (r - 14), cy - math.cos(a) * (r - 14))], (40, 30, 20, 255), 4)
-    # 23:47
-    a_h = (11 + 47 / 60) / 12 * 2 * math.pi
-    a_m = 47 / 60 * 2 * math.pi
-    c.line([(cx, cy), (cx + math.sin(a_h) * r * 0.45, cy - math.cos(a_h) * r * 0.45)], (30, 20, 16, 255), 6)
-    c.line([(cx, cy), (cx + math.sin(a_m) * r * 0.7, cy - math.cos(a_m) * r * 0.7)], (30, 20, 16, 255), 4)
-    c.circ(cx, cy, 5, (160, 30, 30, 255))
+    c.rect((x0, y0, x1, y1), (96, 58, 30, 255))
+    c.rect((x0 + 6, y0 + 6, x1 - 6, y1 - 6), (150, 98, 54, 255))
+    c.rect((x0 + 12, y0 + 12, x1 - 12, y1 - 12), (110, 70, 38, 255))
+    c.rect((x0 + 22, y0 + 22, x1 - 22, y1 - 22), (236, 228, 206, 255))
+    px0, py0, px1, py1 = x0 + 38, y0 + 38, x1 - 38, y1 - 38
+    pw, ph = px1 - px0, py1 - py0
+    p = Cv(pw, ph, c.s * 2)
+    # небо, озеро, берёзы
+    p.rect((0, 0, pw, ph * 0.5), (170, 196, 214, 255))
+    p.rect((0, ph * 0.42, pw, ph * 0.58), (110, 150, 170, 255))
+    p.rect((0, ph * 0.56, pw, ph), (120, 150, 80, 255))
+    for k in range(6):
+        x = 10 + k * pw / 5.5
+        p.ell((x - 30, ph * 0.08, x + 30, ph * 0.5), (90, 130, 70, 255))
+        p.rect((x - 3, ph * 0.3, x + 3, ph * 0.6), (240, 240, 230, 255))
+    p.circ(pw * 0.85, ph * 0.12, 16, (255, 240, 200, 255))
+    Hm.front(p.sub(pw * 0.34, ph * 0.22, 0.17), C.ANDREY, dict(face=dict(turn=0.15, gaze=0.0, smile=0.8), arms=((10, 10), (55, 120))))
+    Hm.front(p.sub(pw * 0.66, ph * 0.17, 0.18), C.SASHA, dict(face=dict(turn=-0.15, gaze=0.0, smile=0.9), arms=((55, 120), (10, 10))))
+    im = p.im.resize((int(pw * c.s), int(ph * c.s)), Image.LANCZOS)
+    a = np.asarray(im, np.float32)
+    rgb = a[..., :3]
+    g = rgb.mean(-1, keepdims=True)
+    rgb = (rgb * 0.75 + g * 0.25) * np.array([1.06, 1.0, 0.86]) + 8        # выцветание
+    a[..., :3] = np.clip(rgb, 0, 255)
+    c.im.alpha_composite(Image.fromarray(a.astype(np.uint8)), (int(px0 * c.s + c.ox), int(py0 * c.s + c.oy)))
+    c.rect((px0, py0, px1, py1), None, outline=(200, 190, 170, 255), width=3)
 
 
 def floor(c):
-    c.rect((0, 1380, W, H), (110, 70, 40, 255))
-    # ёлочка паркета
+    c.rect((X0W, 1380, X1W, Y1W), (110, 70, 40, 255))
     for row in range(0, 30):
         y = 1380 + row * 26
-        for col in range(-2, 22):
+        for col in range(-20, 22):
             x = col * 60 + (row % 2) * 30
-            col_v = 96 + ((row * 7 + col * 13) % 5) * 7
-            c.poly([(x, y), (x + 30, y + 13), (x + 30, y + 39), (x, y + 26)], (col_v + 30, col_v - 10, col_v - 50, 255))
-            c.poly([(x + 30, y + 13), (x + 60, y), (x + 60, y + 26), (x + 30, y + 39)], (col_v + 20, col_v - 18, col_v - 56, 255))
-    # плинтус
-    c.rect((0, 1370, W, 1396), (90, 54, 30, 255))
-    # ковёр на полу
-    c.poly([(60, 1560), (1020, 1560), (1080, 1920), (0, 1920)], (96, 30, 34, 255))
-    c.poly([(90, 1580), (990, 1580), (1040, 1920), (40, 1920)], (150, 52, 46, 255))
-    for i in range(10):
+            v = 96 + ((row * 7 + col * 13) % 5) * 7
+            c.poly([(x, y), (x + 30, y + 13), (x + 30, y + 39), (x, y + 26)], (v + 30, v - 10, v - 50, 255))
+            c.poly([(x + 30, y + 13), (x + 60, y), (x + 60, y + 26), (x + 30, y + 39)], (v + 20, v - 18, v - 56, 255))
+    c.rect((X0W, 1370, X1W, 1396), (90, 54, 30, 255))
+    c.poly([(60, 1560), (1020, 1560), (1080, 2100), (-60, 2100)], (96, 30, 34, 255))
+    c.poly([(90, 1580), (990, 1580), (1040, 2100), (-20, 2100)], (150, 52, 46, 255))
+    for i in range(14):
         y = 1600 + i * 34
         c.line([(110 - i * 5, y), (970 + i * 5, y)], (190, 150, 80, 120), 3)
 
 
 def sofa(c):
-    g = (64, 96, 72, 255)
-    g_dark = (44, 70, 52, 255)
-    g_light = (84, 118, 90, 255)
+    g, gd, gl = (64, 96, 72, 255), (44, 70, 52, 255), (84, 118, 90, 255)
     c.rect((40, 1440, 70, 1480), (60, 36, 20, 255))
     c.rect((1010, 1440, 1040, 1480), (60, 36, 20, 255))
     c.rect((30, 880, 1050, 1220), g, r=40)
-    for x in range(120, 1000, 110):  # стёжка
-        c.line([(x, 900), (x, 1180)], g_dark, 4)
+    for x in range(120, 1000, 110):
+        c.line([(x, 900), (x, 1180)], gd, 4)
         for y in (960, 1080):
-            c.circ(x + 55, y, 7, g_dark)
-    c.rect((30, 880, 1050, 910), g_light, r=20)
-    # салфетка-кружево
-    pts = [(190, 868)]
-    for i in range(13):
-        x = 190 + i * 16
-        pts.append((x + 8, 960 + (10 if i % 2 else 0)))
-    pts.append((398, 868))
+            c.circ(x + 55, y, 7, gd)
+    c.rect((30, 880, 1050, 910), gl, r=20)
+    pts = [(560, 868)] + [(568 + i * 16, 960 + (10 if i % 2 else 0)) for i in range(13)] + [(768, 868)]
     c.poly(pts, (236, 232, 222, 255))
     for i in range(12):
-        c.circ(200 + i * 16, 900 + (i % 3) * 14, 4, (200, 196, 186, 255))
-    c.rect((110, 1180, 970, 1310), g_light, r=24)
-    c.line([(540, 1185), (540, 1305)], g_dark, 4)
-    c.rect((100, 1290, 980, 1440), g_dark, r=16)
+        c.circ(570 + i * 16, 900 + (i % 3) * 14, 4, (200, 196, 186, 255))
+    c.rect((110, 1180, 970, 1310), gl, r=24)
+    c.line([(540, 1185), (540, 1305)], gd, 4)
+    c.rect((100, 1290, 980, 1440), gd, r=16)
     for x0 in (10, 940):
         c.rect((x0, 1000, x0 + 130, 1450), g, r=44)
-        c.rect((x0, 1000, x0 + 130, 1060), g_light, r=40)
-
-
-def andrey(c, eyes_closed=False):
-    skin, skin_d = (226, 182, 150, 255), (190, 140, 110, 255)
-    suit, suit_d, suit_l = (38, 52, 112, 255), (26, 36, 84, 255), (56, 74, 140, 255)
-    stripe = (230, 230, 236, 255)
-    # опущенная нога (правая): бедро на нас (ракурс), колено, голень до пола
-    c.poly([(330, 1330), (414, 1330), (408, 1552), (350, 1552)], suit, smooth=False)
-    c.poly([(380, 1330), (414, 1330), (408, 1552), (386, 1552)], suit_d, smooth=False)
-    c.line([(410, 1350), (404, 1546)], stripe, 7)
-    c.poly([(312, 1190), (440, 1190), (448, 1290), (424, 1346), (330, 1350), (304, 1290)], suit, smooth=True)
-    c.ell((318, 1262, 436, 1352), suit_l)
-    c.ell((336, 1272, 412, 1318), (72, 92, 160, 255))
-    c.line([(440, 1200), (446, 1300)], stripe, 7)
-    c.rect((322, 1540, 420, 1590), (40, 34, 30, 255), r=18)   # тапок
-    c.rect((316, 1570, 426, 1596), (110, 30, 30, 255), r=8)
-    # задранная на диван нога (левая): бедро вверх к колену, голень вниз на сиденье
-    c.poly([(420, 1200), (470, 1150), (590, 1040), (640, 1060), (630, 1110), (520, 1220), (440, 1240)], suit, smooth=True)
-    c.line([(470, 1160), (600, 1046)], stripe, 7)
-    c.poly([(595, 1050), (645, 1060), (690, 1225), (640, 1240)], suit_d, smooth=False)
-    c.line([(642, 1065), (684, 1222)], stripe, 7)
-    c.ell((620, 1215, 730, 1262), (232, 228, 218, 255))   # носок
-    # торс
-    torso = [(282, 935), (330, 890), (370, 880), (446, 880), (490, 890), (532, 935), (522, 1060), (508, 1200), (318, 1205), (298, 1060)]
-    c.poly(torso, suit, smooth=True)
-    c.poly([(420, 890), (446, 880), (490, 890), (532, 935), (522, 1060), (508, 1200), (460, 1205), (470, 1000)], suit_d, smooth=True)
-    c.line([(408, 900), (406, 1200)], (190, 190, 200, 255), 3)            # молния
-    c.poly([(366, 878), (408, 920), (450, 878), (440, 868), (408, 896), (376, 868)], (220, 220, 228, 255))  # воротник
-    c.line([(286, 950), (300, 1050)], stripe, 6)
-    c.line([(528, 950), (518, 1050)], stripe, 6)
-    # правая рука -> к подлокотнику со стаканом
-    c.line([(300, 940), (268, 1040), (220, 1080)], suit, 54, smooth=True)
-    c.line([(286, 950), (256, 1036), (214, 1066)], stripe, 5, smooth=True)
-    c.ell((176, 1050, 226, 1096), skin)
-    # стакан в подстаканнике
-    c.rect((150, 980, 206, 1070), (190, 120, 60, 200), r=4)
-    c.rect((150, 980, 206, 996), (210, 200, 180, 160))
-    c.poly([(146, 1030), (210, 1030), (206, 1076), (150, 1076)], (190, 190, 196, 255))
-    for x in range(156, 206, 10):
-        c.line([(x, 1034), (x, 1072)], (140, 140, 150, 255), 3)
-    c.arc((196, 1036, 230, 1070), -90, 90, (170, 170, 178, 255), 6)
-    c.line([(186, 960), (180, 1050)], (200, 200, 210, 255), 3)   # ложечка
-    # левая рука -> на колене
-    c.line([(520, 945), (566, 1020), (604, 1048)], suit, 52, smooth=True)
-    c.line([(536, 950), (580, 1010)], stripe, 5)
-    c.ell((588, 1022, 646, 1068), skin)
-    # шея и голова (3/4 влево, к телевизору)
-    c.poly([(378, 820), (436, 820), (440, 890), (378, 890)], skin_d)
-    head = [(352, 700), (408, 676), (458, 696), (476, 750), (466, 806), (430, 842), (392, 846), (362, 826), (348, 790), (340, 760)]
-    c.poly(head, skin, smooth=True)
-    c.poly([(444, 704), (462, 700), (476, 750), (466, 806), (436, 836), (452, 760)], (190, 140, 110, 150), smooth=True)
-    c.ell((450, 744, 486, 796), skin_d)   # ухо
-    c.ell((458, 752, 478, 788), (170, 120, 96, 255))
-    # волосы
-    hair = (58, 40, 28, 255)
-    c.poly([(338, 742), (336, 700), (360, 668), (408, 652), (462, 664), (490, 704), (488, 760), (474, 760), (466, 726), (444, 704), (402, 702), (372, 716), (352, 744)], hair, smooth=True)
-    c.poly([(352, 706), (372, 690), (398, 704), (380, 724)], hair, smooth=True)
-    # лицо (смотрит влево)
-    c.line([(352, 734), (386, 728)], (60, 40, 28, 255), 6)
-    c.line([(404, 728), (436, 734)], (60, 40, 28, 255), 6)
-    if eyes_closed:
-        c.line([(356, 756), (382, 756)], (80, 50, 40, 255), 4)
-        c.line([(404, 756), (432, 756)], (80, 50, 40, 255), 4)
-    else:
-        c.ell((354, 746, 384, 766), (245, 240, 235, 255))
-        c.ell((402, 746, 434, 766), (245, 240, 235, 255))
-        c.circ(362, 756, 8, (70, 50, 36, 255))
-        c.circ(411, 756, 8, (70, 50, 36, 255))
-        c.circ(360, 753, 3, (255, 255, 255, 255))
-        c.circ(409, 753, 3, (255, 255, 255, 255))
-    c.poly([(380, 764), (350, 800), (376, 806)], skin_d)    # нос
-    c.line([(360, 822), (392, 820)], (150, 80, 70, 255), 4)  # рот
-    c.ell((396, 790, 420, 806), (236, 160, 140, 120))       # румянец
-
-
-def cat_sprite(s):
-    c = Cv(320, 200, s)
-    o, od, ol = (226, 128, 46, 255), (176, 86, 28, 255), (246, 170, 90, 255)
-    c.ell((20, 150, 300, 196), (20, 20, 20, 70))
-    c.poly([(40, 120), (90, 50), (180, 36), (260, 60), (300, 120), (290, 170), (200, 186), (90, 184), (40, 160)], o, smooth=True)
-    for i in range(6):   # полоски
-        x = 120 + i * 30
-        c.line([(x, 46), (x + 12, 90), (x + 4, 130)], od, 9, smooth=True)
-    # хвост вокруг
-    c.line([(290, 150), (250, 182), (150, 186), (80, 176)], o, 28, smooth=True)
-    for x in (120, 170, 220):
-        c.line([(x, 172), (x + 6, 196)], od, 7)
-    # голова
-    c.ell((14, 70, 124, 168), o)
-    c.poly([(20, 92), (26, 40), (60, 76)], o)
-    c.poly([(78, 72), (104, 34), (114, 94)], o)
-    c.poly([(30, 84), (32, 54), (54, 78)], (240, 160, 150, 255))
-    c.poly([(86, 76), (102, 48), (106, 88)], (240, 160, 150, 255))
-    c.ell((30, 120, 100, 168), ol)
-    c.arc((30, 104, 56, 124), 200, 340, (60, 30, 10, 255), 4)
-    c.arc((72, 104, 98, 124), 200, 340, (60, 30, 10, 255), 4)
-    c.poly([(58, 130), (70, 130), (64, 138)], (200, 100, 100, 255))
-    for dy in (-4, 4):
-        c.line([(40, 136 + dy), (6, 130 + dy * 2)], (255, 240, 220, 200), 2)
-        c.line([(90, 136 + dy), (124, 130 + dy * 2)], (255, 240, 220, 200), 2)
-    for x in (44, 60, 76):
-        c.line([(x, 82), (x + 4, 98)], od, 5)
-    return c.im
+        c.rect((x0, 1000, x0 + 130, 1060), gl, r=40)
 
 
 def lamp(c):
@@ -274,74 +142,240 @@ def lamp(c):
     c.ell((960, 1370, 1060, 1400), (50, 40, 30, 255))
 
 
+def servant(c):
+    """Советский сервант с хрусталём."""
+    x0, x1 = -990, -700
+    c.rect((x0 + 10, 560, x1 + 10, 1392), (40, 28, 18, 100))
+    c.rect((x0, 540, x1, 1380), (110, 66, 36, 255))
+    c.rect((x0 + 16, 560, x1 - 16, 980), (60, 70, 80, 255))
+    for y in (700, 840):
+        c.rect((x0 + 16, y, x1 - 16, y + 8), (200, 200, 210, 255))
+    rnd = random.Random(4)
+    for shelf, y in enumerate((700, 840, 975)):
+        x = x0 + 30
+        while x < x1 - 50:
+            k = rnd.random()
+            if k < 0.4:   # бокал
+                c.poly([(x, y - 70), (x + 30, y - 70), (x + 20, y - 40), (x + 18, y - 8), (x + 26, y), (x + 4, y), (x + 12, y - 8), (x + 10, y - 40)], (200, 220, 236, 200))
+                x += 40
+            elif k < 0.7:  # тарелка на ребре
+                c.ell((x, y - 90, x + 80, y), (236, 236, 240, 255))
+                c.ell((x + 12, y - 78, x + 68, y - 12), (60, 110, 170, 255))
+                c.ell((x + 20, y - 70, x + 60, y - 20), (236, 236, 240, 255))
+                x += 88
+            else:          # ваза
+                c.poly([(x + 10, y), (x, y - 50), (x + 14, y - 96), (x + 40, y - 96), (x + 54, y - 50), (x + 44, y)], (180, 210, 230, 200), smooth=True)
+                x += 62
+        c.line([(x0 + 16, y - 120), (x0 + 30, y - 10)], (255, 255, 255, 60), 6)
+    c.line([(x0 + 145, 560), (x0 + 145, 980)], (110, 66, 36, 255), 8)
+    c.rect((x0, 990, x1, 1380), (96, 56, 30, 255))
+    for yy in (1000, 1190):
+        c.rect((x0 + 16, yy, x1 - 16, yy + 176), (120, 74, 40, 255), r=6)
+        c.circ((x0 + x1) / 2, yy + 88, 8, (210, 190, 120, 255))
+    c.rect((x0 - 10, 530, x1 + 10, 548), (90, 52, 28, 255))
+
+
+def doorway(c):
+    x0, y0, x1, y1 = DOOR
+    # коридор за проёмом
+    c.rect((x0, y0, x1, y1), (150, 120, 84, 255))
+    c.poly([(x0, y0), (x0 + 60, y0 + 50), (x0 + 60, y1 - 60), (x0, y1)], (120, 92, 62, 255))
+    c.poly([(x0, y1), (x0 + 60, y1 - 60), (x1, y1 - 60), (x1, y1)], (110, 70, 44, 255))
+    c.rect((x0 + 80, y1 - 60, x1 - 10, y1 - 30), (130, 40, 40, 255))      # дорожка
+    c.line([(x0 + 150, y0 + 160), (x0 + 150, y0 + 200)], (60, 40, 30, 255), 6)   # вешалка
+    c.poly([(x0 + 110, y0 + 200), (x0 + 190, y0 + 200), (x0 + 210, y0 + 460), (x0 + 90, y0 + 460)], (70, 60, 70, 255), smooth=True)
+    c.rect((x0 + 90, y0 + 20, x1 - 20, y0 + 26), (90, 70, 50, 255))
+    # открытая дверь (полотно под углом)
+    c.poly([(x0, y0), (x0 - 70, y0 + 40), (x0 - 70, y1 + 20), (x0, y1)], (176, 150, 120, 255))
+    c.poly([(x0 - 60, y0 + 90), (x0 - 12, y0 + 70), (x0 - 12, y0 + 300), (x0 - 60, y0 + 320)], (156, 130, 100, 255))
+    c.circ(x0 - 56, y0 + 360, 7, (200, 180, 120, 255))
+    # наличник
+    c.rect((x0 - 26, y0 - 30, x1 + 26, y0), (226, 220, 206, 255))
+    c.rect((x0 - 26, y0 - 30, x0, y1), (226, 220, 206, 255))
+    c.rect((x1, y0 - 30, x1 + 26, y1), (226, 220, 206, 255))
+    # выключатель
+    c.rect((x1 + 50, 1000, x1 + 100, 1060), (236, 232, 222, 255), r=4)
+    c.rect((x1 + 66, 1010, x1 + 84, 1050), (210, 206, 196, 255))
+
+
+def clock(c, cx, cy, r, t):
+    c.circ(cx + 6, cy + 8, r, (40, 30, 20, 90))
+    c.circ(cx, cy, r, (110, 66, 36, 255))
+    c.circ(cx, cy, r - 10, (236, 226, 200, 255))
+    for i in range(60):
+        a = i / 60 * 2 * math.pi
+        l = 14 if i % 5 == 0 else 6
+        c.line([(cx + math.sin(a) * (r - 14 - l), cy - math.cos(a) * (r - 14 - l)), (cx + math.sin(a) * (r - 14), cy - math.cos(a) * (r - 14))], (40, 30, 20, 255), 4 if i % 5 == 0 else 2)
+    sec = 47 * 60 + 12 + t                      # 23:47:12 + время ролика
+    sv = math.floor(sec) + min(1, (sec % 1) / 0.12) ** 0.5    # секундная стрелка «щёлкает»
+    a_s = sv / 60 * 2 * math.pi
+    a_m = (sec / 60) / 60 * 2 * math.pi
+    a_h = (11 + sec / 3600) / 12 * 2 * math.pi
+    c.line([(cx, cy), (cx + math.sin(a_h) * r * 0.45, cy - math.cos(a_h) * r * 0.45)], (30, 20, 16, 255), 7)
+    c.line([(cx, cy), (cx + math.sin(a_m) * r * 0.7, cy - math.cos(a_m) * r * 0.7)], (30, 20, 16, 255), 5)
+    c.line([(cx - math.sin(a_s) * 12, cy + math.cos(a_s) * 12), (cx + math.sin(a_s) * r * 0.78, cy - math.cos(a_s) * r * 0.78)], (170, 30, 30, 255), 2.5)
+    c.circ(cx, cy, 6, (170, 30, 30, 255))
+
+
+def beer_mug(c, x, y, sc=1.0, side=-1, level=0.8):
+    """Стеклянная пивная кружка; (x,y) — центр ручки."""
+    bx = x + side * 70 * sc
+    w2, h = 46 * sc, 150 * sc
+    top = y - h * 0.55
+    c.rect((bx - w2, top, bx + w2, top + h), (220, 230, 236, 120), r=10 * sc)
+    c.rect((bx - w2 + 6 * sc, top + h * (1 - level), bx + w2 - 6 * sc, top + h - 8 * sc), (226, 150, 40, 230), r=6 * sc)
+    for k in range(4):
+        c.circ(bx - 20 * sc + k * 13 * sc, top + h * 0.6 + (k % 2) * 20 * sc, 3 * sc, (255, 220, 150, 200))
+    c.ell((bx - w2 + 2 * sc, top + h * (1 - level) - 18 * sc, bx + w2 - 2 * sc, top + h * (1 - level) + 12 * sc), (250, 246, 232, 255))
+    c.rect((bx - w2, top + h - 14 * sc, bx + w2, top + h), (200, 214, 222, 200), r=6 * sc)
+    c.arc((x - 30 * sc, y - 46 * sc, x + 30 * sc, y + 46 * sc), 0, 360, (210, 222, 230, 220), 10 * sc)
+    c.line([(bx - w2 + 10 * sc, top + 14 * sc), (bx - w2 + 10 * sc, top + h - 20 * sc)], (255, 255, 255, 140), 5 * sc)
+
+
+def cat(c, x, y, sc, t, head_up=0.0, eyes=0.0, meow=0.0, look=0.0):
+    """Рыжий кот на диване. (x,y) — левый верх, как у старого спрайта 320x200."""
+    o, od, ol = (226, 128, 46, 255), (176, 86, 28, 255), (248, 176, 98, 255)
+    k = c.sub(x, y, sc)
+    br = 1 + 0.02 * math.sin(t * 2 * math.pi / 2.6) * (1 - head_up)
+    k.ell((20, 150, 300, 196), (20, 20, 20, 70))
+    body = [(40, 120), (90, 50 / br), (180, 36 / br), (260, 60 / br), (300, 120), (290, 170), (200, 186), (90, 184), (40, 160)]
+    # хвост: огибает тело, кончик подрагивает
+    tip = math.sin(t * 2.3) * 14 + math.sin(t * 7.1) * 5
+    k.line([(292, 150), (300, 186), (240, 198), (150, 198), (70, 190), (34 + tip, 176 - tip * 0.6)], o, 30, smooth=True)
+    for xx in (110, 160, 210, 260):
+        k.line([(xx, 186), (xx + 6, 210)], od, 8)
+    k.line([(70, 190), (34 + tip, 176 - tip * 0.6)], (250, 240, 230, 255), 22)
+    k.poly(body, o, smooth=True)
+    for i in range(6):
+        xx = 120 + i * 30
+        k.line([(xx, 44 / br + 4), (xx + 12, 90), (xx + 4, 130)], od, 9, smooth=True)
+    # голова: спит (лежит слева) или поднята и повернута к хозяину
+    hx = 70 - head_up * 10 - look * 8
+    hy = 120 - head_up * 70
+    hd = k.sub(hx, hy, 1.0 + head_up * 0.1)
+    hd.ell((-56, -50, 56, 48), o)
+    hd.poly([(-50, -28), (-46, -86), (-10, -44)], o)
+    hd.poly([(10, -46), (40, -88), (52, -22)], o)
+    hd.poly([(-40, -36), (-38, -70), (-18, -44)], (240, 160, 150, 255))
+    hd.poly([(18, -44), (36, -72), (42, -30)], (240, 160, 150, 255))
+    hd.ell((-40, 0, 40, 46), ol)
+    for ex in (-22, 22):
+        if eyes < 0.3:
+            hd.arc((ex - 13, -16, ex + 13, 4), 200, 340, (60, 30, 10, 255), 4)
+        else:
+            h = 12 * eyes
+            hd.ell((ex - 13, -6 - h, ex + 13, -6 + h), (190, 210, 60, 255))
+            hd.ell((ex - 3 + look * 4, -6 - h, ex + 3 + look * 4, -6 + h), (20, 20, 10, 255))
+            hd.circ(ex - 4, -10, 2.5, (255, 255, 255, 255))
+    hd.poly([(-6, 8), (6, 8), (0, 15)], (200, 100, 100, 255))
+    if meow > 0.05:
+        hd.ell((-12, 16, 12, 18 + 22 * meow), (120, 30, 40, 255))
+        hd.poly([(-8, 18), (-4, 18), (-6, 26)], (255, 255, 255, 255))
+        hd.poly([(4, 18), (8, 18), (6, 26)], (255, 255, 255, 255))
+    for dy in (-4, 4):
+        hd.line([(-26, 16 + dy), (-64, 10 + dy * 2)], (255, 240, 220, 200), 2)
+        hd.line([(26, 16 + dy), (64, 10 + dy * 2)], (255, 240, 220, 200), 2)
+    for xx in (-16, 0, 16):
+        hd.line([(xx, -42), (xx + 4, -26)], od, 5)
+
+
 class Room:
     def __init__(self):
-        Wp, Hp = int(W * WS), int(H * WS)
-        self.Wp, self.Hp = Wp, Hp
-        imgs = []
-        for closed in (False, True):
-            c = Cv(W, H, S, (0, 0, 0, 255))
-            wallpaper(c)
-            clock(c, 170, 250, 74)
-            carpet(c, 70, 420, 1010, 1010)
-            photo(c, 390, 120, 690, 420)
-            lamp(c)
-            floor(c)
-            sofa(c)
-            a = c.layer()
-            andrey(a, closed)
-            c.paste(a.silhouette((10, 10, 20, 120)), blur=18, offset=(70, -10))
-            c.paste(a)
-            imgs.append(to_f(c.im.resize((Wp, Hp), Image.LANCZOS)))
-        self.alb, self.alb_closed = imgs
-        cat = cat_sprite(S).resize((int(320 * WS), int(200 * WS)), Image.LANCZOS)
-        self.cat = np.asarray(cat, np.float32) / 255
-        self.cat_xy = (int(720 * WS), int(1100 * WS))
-        # карта света от телевизора (источник слева, за кадром)
-        yy, xx = np.mgrid[0:Hp, 0:Wp].astype(np.float32) / WS
-        d2 = (xx + 260) ** 2 + ((yy - 900) * 0.8) ** 2
-        self.tv = (np.exp(-d2 / (2 * 640 ** 2)) * 1.6)[..., None].astype(np.float32)
-        self.amb = np.array([0.05, 0.06, 0.11], np.float32)
-        # лунный свет из окна справа сверху (слабый)
-        self.moon = (radial(Wp, Hp, Wp * 1.05, Hp * 0.15, Wp * 0.9, 1.6) * 0.18)[..., None]
-        self.steam_t = 0
+        c = Cv(X1W - X0W, Y1W - Y0W, KS, (0, 0, 0, 255), ox=-X0W * KS, oy=-Y0W * KS)
+        wallpaper(c)
+        carpet(c, 70, 420, 1010, 1010)
+        photo(c, 380, 110, 700, 420)
+        servant(c)
+        doorway(c)
+        lamp(c)
+        floor(c)
+        sofa(c)
+        # картина над сервантом
+        c.rect((-940, 230, -740, 420), (120, 80, 40, 255))
+        c.rect((-926, 244, -754, 406), (90, 120, 150, 255))
+        c.poly([(-926, 360), (-870, 300), (-820, 340), (-754, 280), (-754, 406), (-926, 406)], (60, 90, 60, 255))
+        c.circ(-800, 290, 16, (240, 220, 160, 255))
+        self.bg = c.im.convert("RGB")
+        # освещение (мир, низкое разрешение: 1 px = 8 ед.)
+        self.lw, self.lh = (X1W - X0W) // 8, (Y1W - Y0W) // 8
+        yy, xx = np.mgrid[0:self.lh, 0:self.lw].astype(np.float32) * 8
+        xx += X0W
+        yy += Y0W
+        d2 = (xx + 160) ** 2 + ((yy - 1150) * 0.8) ** 2
+        self.L_tv = (np.exp(-d2 / (2 * 700 ** 2)) * 1.7).astype(np.float32)
+        dx0, dy0, dx1, dy1 = DOOR
+        dd = ((xx - (dx0 + dx1) / 2) / 420) ** 2 + ((yy - 1250) / 520) ** 2
+        self.L_door = (np.exp(-dd) * 1.1).astype(np.float32)
+        self.L_door[(xx > dx0) & (xx < dx1) & (yy > dy0) & (yy < dy1)] = 1.25
+        self.L_moon = radial(self.lw, self.lh, self.lw * 0.95, self.lh * 0.1, self.lw * 0.6, 1.6).astype(np.float32) * 0.15
 
-    def frame(self, t, mode="tv"):
-        """mode='tv' — новости (синий свет), 'static' — помехи после эфира."""
-        blink = (t % 4.3) < 0.13
-        a = (self.alb_closed if blink else self.alb).copy()
-        # кот дышит
-        cx, cy = self.cat_xy
-        br = 1 + 0.02 * math.sin(t * 2 * math.pi / 2.6)
-        ch, cw = self.cat.shape[:2]
-        nh = int(ch * br)
-        cat = np.asarray(Image.fromarray((self.cat * 255).astype(np.uint8)).resize((cw, nh), Image.BILINEAR), np.float32) / 255
-        y0 = cy + ch - nh
-        al = cat[..., 3:4]
-        a[y0:y0 + nh, cx:cx + cw] = a[y0:y0 + nh, cx:cx + cw] * (1 - al) + cat[..., :3] * al
-        if mode == "tv":
+    # ------------------------------------------------------------------
+    def tv_light(self, t):
+        if TL.SHOTS[0][1] <= t < TL.SHOTS[0][2]:
             k = 0.82 + 0.12 * smooth_noise(t * 3, 1) + 0.06 * smooth_noise(t * 11, 2)
-            col = np.array([0.55 + 0.1 * smooth_noise(t * 0.7, 5), 0.72, 1.0], np.float32)
-        else:
-            k = 0.7 + 0.3 * random.Random(int(t * 30)).random()
-            col = np.array([0.85, 0.88, 0.95], np.float32)
-        L = self.amb + self.tv * (k * col) + self.moon * np.array([0.5, 0.6, 1.0], np.float32)
-        out = a * L
-        # пар над чаем
-        if mode == "tv":
-            for i in range(3):
-                ph = (t * 0.35 + i / 3) % 1
-                x = (178 + 14 * math.sin(ph * 6 + i)) * WS
-                y = (960 - ph * 160) * WS
-                g = glow_sprite(int(26 * WS), (120, 130, 150), 2)
-                add_over(out, g * (1 - ph) * 0.35, int(x - 26 * WS), int(y - 26 * WS))
-        return out
+            return k * np.array([0.55 + 0.1 * smooth_noise(t * 0.7, 5), 0.72, 1.0], np.float32)
+        # после рекламы — вечернее шоу: тёплые и холодные переливы
+        u = 0.5 + 0.5 * smooth_noise(t * 0.35, 8)
+        k = 0.8 + 0.12 * smooth_noise(t * 3, 4) + 0.06 * smooth_noise(t * 9, 6)
+        return k * (np.array([0.62, 0.72, 1.0], np.float32) * (1 - u) + np.array([1.0, 0.78, 0.6], np.float32) * u)
 
-    def view(self, t, zoom=1.0, cx=0.5, cy=0.5, mode="tv"):
-        fr = self.frame(t, mode)
-        cw, chh = self.Wp / zoom, self.Hp / zoom
-        x0 = (self.Wp - cw) * cx
-        y0 = (self.Hp - chh) * cy
-        from gfx import to_im
-        im = to_im(fr).crop((int(x0), int(y0), int(x0 + cw), int(y0 + chh))).resize((W, H), Image.BILINEAR)
-        return np.asarray(im, np.float32) / 255
+    def view(self, t, cx, cy, w, draw_actors, door_light=0.0):
+        """Окно мира с центром (cx,cy) и шириной w. draw_actors(c, k, X0, Y0) рисует персонажей в координатах кадра."""
+        h = w * H / W
+        X0 = min(max(cx - w / 2, X0W), X1W - w)
+        Y0 = min(max(cy - h / 2, Y0W), Y1W - h)
+        box = (int((X0 - X0W) * KS), int((Y0 - Y0W) * KS), int((X0 + w - X0W) * KS), int((Y0 + h - Y0W) * KS))
+        alb = self.bg.crop(box).resize((W, H), Image.BILINEAR).convert("RGBA")
+        k = W / w
+        a = Cv(W, H, AS)
+        clock(a.sub((170 - X0) * k, (250 - Y0) * k, k), 0, 0, 74, t)
+        draw_actors(a, k, X0, Y0)
+        alb.alpha_composite(a.im.reduce(AS))
+        out = np.asarray(alb.convert("RGB"), np.float32) / 255
+        lb = ((X0 - X0W) / 8, (Y0 - Y0W) / 8, (X0 + w - X0W) / 8, (Y0 + h - Y0W) / 8)
+
+        def up(m):
+            im = Image.fromarray(np.clip(m * 100, 0, 255).astype(np.uint8))
+            return np.asarray(im.transform((W, H), Image.EXTENT, lb, Image.BILINEAR), np.float32)[..., None] / 100
+        col = self.tv_light(t)
+        L = np.array([0.05, 0.06, 0.11], np.float32) + up(self.L_tv) * col + up(self.L_moon) * np.array([0.5, 0.6, 1.0], np.float32)
+        if door_light > 0:
+            L = L + up(self.L_door) * door_light * np.array([1.0, 0.74, 0.42], np.float32)
+        return out * L
+
+
+# --- позы ------------------------------------------------------------------
+ANDREY_SC = 0.6
+A_X, A_TOP = 300, 600
+
+
+def andrey_seated(c, k, X0, Y0, t, face, hand_r, hand_l=None, mug=True, stand=0.0, leg_down=0.0):
+    """Андрей на диване. stand 0..1 — вставание, leg_down 0..1 — опускает ногу с дивана."""
+    sc = ANDREY_SC * k
+    top = A_TOP - 64 * ease(stand) + 4 * math.sin(t * 1.6) * (1 - stand)
+    x = (A_X + 30 * ease(stand) - X0) * k
+    y = (top - Y0) * k
+    # колени/ступни (локальные коорд.)
+    knee_l = (-118, 1190)
+    ank_l = (-112, 1600)
+    u = ease(leg_down)
+    knee_r = (260 * (1 - u) + 86 * u, 860 * (1 - u) + 1215 * u)
+    ank_r = (390 * (1 - u) + 92 * u, 960 * (1 - u) + 1600 * u)
+    s = ease(stand)
+    if s > 0:
+        knee_l = (knee_l[0] * (1 - s) - 62 * s, knee_l[1] * (1 - s) + 1320 * s)
+        ank_l = (ank_l[0] * (1 - s) - 74 * s, ank_l[1] * (1 - s) + 1668 * s)
+        knee_r = (knee_r[0] * (1 - s) + 62 * s, knee_r[1] * (1 - s) + 1320 * s)
+        ank_r = (ank_r[0] * (1 - s) + 74 * s, ank_r[1] * (1 - s) + 1668 * s)
+    props = {}
+    if mug:
+        props[-1] = lambda cc, p, a: beer_mug(cc, p[0], p[1], 1.0, -1)
+    arms = (hand_r, hand_l if hand_l is not None else {"ik": (knee_r[0] - 40, knee_r[1] - 40)})
+    return Hm.front(c.sub(x, y, sc), C.ANDREY, dict(face=face, legs="sit", sit={-1: (knee_l, ank_l), 1: (knee_r, ank_r)}, arms=arms, props=props,
+                                                     breath=math.sin(t * 1.6)))
+
+
+def armrest_local(X0, Y0, k, stand=0.0):
+    """Точка подлокотника в локальных координатах Андрея."""
+    top = A_TOP - 64 * ease(stand)
+    return ((75 - A_X - 30 * ease(stand)) / ANDREY_SC, (990 - top) / ANDREY_SC)
