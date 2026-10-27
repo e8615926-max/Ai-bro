@@ -79,6 +79,7 @@ def motion_blur(out, dx, n=9):
 
 # --- реквизит ------------------------------------------------------------
 def mic(c, p, ang, sc=1.0):
+    """Микрофон: рисуется до кисти (кисть его обхватывает)."""
     x, y = p
     c.line([(x, y + 10), (x + 10, y - 120)], (30, 30, 34, 255), 26)
     c.circ(x + 12, y - 140, 32, (80, 80, 86, 255))
@@ -87,6 +88,32 @@ def mic(c, p, ang, sc=1.0):
     c.rect((x - 22, y - 106, x + 42, y - 54), (200, 20, 30, 255), r=6)
     if abs(c.sx) > 0.7 * c.s:
         c.text((x + 10, y - 80), "НД", 30, (255, 255, 255, 255), anchor="mm")
+
+
+mic.under_hand = True
+
+
+def smooth_pulse(t, t0, up, hold, down):
+    if t < t0 or t > t0 + up + hold + down:
+        return 0.0
+    if t < t0 + up:
+        return ease((t - t0) / up)
+    if t < t0 + up + hold:
+        return 1.0
+    return 1 - ease((t - t0 - up - hold) / down)
+
+
+def lerp2(a, b, u):
+    return (a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u)
+
+
+def aim_elbows(c, L, recoil=0.0):
+    """Со спины: руки вытянуты вперёд — видны локти, разведённые в стороны, предплечья скрыты корпусом."""
+    for s_ in (-1, 1):
+        sh_ = (s_ * 121 * L.width, 300)
+        el = (s_ * 215 * L.width, 360 - recoil * 20)
+        Hm.limb(c, sh_, el, 92 * L.width, 80 * L.width, L.top_col)
+        Hm.limb(c, el, (s_ * 150 * L.width, 330 - recoil * 24), 80 * L.width, 70 * L.width, Hm.sh(L.top_col, 0.85))
 
 
 def gun(c, p, ang):
@@ -222,33 +249,46 @@ class Field:
                 person(L, look, "front", wx, 1062, cop_hw, X0, Y0, k,
                        dict(face=dict(turn=(0.4 if i == 0 else -0.4), gaze=(0.6 if i == 0 else -0.6), blink=TL.blink(t, 11 + i)),
                             arms=((12, 30), {"ik": (60, 900)}) if i == 0 else ({"ik": (-60, 900)}, (12, 30))))
-        # входят внутрь: химзащита и пожарные (аккуратно, спиной к нам)
+        # входят внутрь: химзащита и пожарные приходят из-за края кадра боком, у ворот поворачиваются и осторожно уходят вглубь
         if t < EV["boom"]:
             for j in range(4):
-                cyc = 7.0
+                cyc = 9.0
                 u = ((t + j * cyc / 4) % cyc) / cyc
                 look = C.HAZMAT if j % 2 == 0 else C.FIRE
-                wy = lerp(1095, 1040, u)
-                hw = lerp(110, 84, u)
-                wx = 540 + (j - 1.5) * 14
-                if u < 0.9:
-                    person(L, look, "back", wx, wy, hw, X0, Y0, k, dict(legs="walk", phase=t * 5 + j))
-            # химзащита идёт вдоль забора боком
-            u = ((t * 0.08) % 1)
-            person(L, C.HAZMAT, "side", lerp(240, 440, u), 1068, 104, X0, Y0, k, dict(legs="sneak", phase=t * 5, prop=flashlight))
-            u2 = ((t * 0.07 + 0.5) % 1)
-            person(L, C.HAZMAT, "side", lerp(900, 660, u2), 1070, 104, X0, Y0, k, dict(legs="sneak", phase=t * 5 + 1), fx=-1)
+                left = j < 2
+                gx = 532 + (j - 1.5) * 12
+                if u < 0.5:                       # подход к воротам вдоль дороги
+                    v = u / 0.5
+                    x0_ = -260 if left else 1340
+                    wx = lerp(x0_, gx, v)
+                    hw = 108
+                    dist = abs(wx - x0_)
+                    person(L, look, "side", wx, 1078, hw, X0, Y0, k, dict(legs="sneak", phase=dist / Hm.step_per_radian(hw, "sneak"), prop=flashlight if j % 2 == 0 else None),
+                           fx=1 if left else -1)
+                else:                             # спиной к нам, осторожно внутрь
+                    v = (u - 0.5) / 0.5
+                    wy = lerp(1078, 1000, v)
+                    hw = lerp(108, 30, v)
+                    if hw > 34:
+                        person(L, look, "back", gx, wy, hw, X0, Y0, k, dict(legs="sneak", phase=v * 26 + j))
+            for j, (spd, off, fy) in enumerate(((0.05, 0.0, 1068), (0.045, 0.5, 1070))):
+                u = ((t * spd + off) % 1)
+                x0_, x1_ = (-260, 1340) if j == 0 else (1340, -260)
+                wx = lerp(x0_, x1_, u)
+                person(L, C.HAZMAT, "side", wx, fy, 104, X0, Y0, k, dict(legs="sneak", phase=abs(wx - x0_) / Hm.step_per_radian(104, "sneak"), prop=flashlight),
+                       fx=1 if j == 0 else -1)
         elif tb > 2.0:
-            # паника: бегут прочь
+            # паника: бегут прочь по-настоящему (ноги соответствуют скорости)
             for j in range(3):
-                u = min(1, (tb - 2.0 - j * 0.5) / 3.0)
-                if u <= 0:
+                d = (tb - 2.0 - j * 0.5) * 300
+                if d <= 0:
                     continue
                 look = (C.FIRE, C.HAZMAT, C.DOCTOR)[j]
                 sgn = -1 if j % 2 == 0 else 1
-                wx = 540 + sgn * lerp(30, 520, u)
-                wy = lerp(1060, 1160, u)
-                person(L, look, "side", wx, wy, lerp(100, 130, u), X0, Y0, k, dict(legs="run", phase=t * 11 + j), fx=sgn)
+                wx = 540 + sgn * (30 + d)
+                wy = 1060 + min(100, d * 0.12)
+                hw = 100 + min(30, d * 0.04)
+                person(L, look, "side", wx, wy, hw, X0, Y0, k, dict(legs="run", phase=d / Hm.step_per_radian(hw, "run") + j), fx=sgn)
         # врачи у скорой
         for i, wx in enumerate((300, 380)):
             if t < EV["boom"]:
@@ -305,8 +345,8 @@ class Field:
             face = dict(turn=0.0, gaze=0.0, gy=0.0, blink=TL.blink(t, 2), mouth=mo, smile=0.15 if mo < 0.1 else 0.0, brows=0.2)
             if TL.talking("sam", t):
                 face.update(turn=-0.4, gaze=-0.8, gy=-0.3)       # смотрит на оператора
-            pf = dict(face=face, arms=({"ik": (-40, 380)}, (8, 14)), props={-1: mic}, breath=math.sin(t * 1.7))
-            pb = dict(arms=((14, 30), (8, 10)), props={-1: mic}, tail=math.sin(t * 2) * 0.3)
+            pf = dict(face=face, arms=({"ik": (-40, 380)}, (8, 14)), props={-1: mic}, face_first=True, breath=math.sin(t * 1.7))
+            pb = dict(arms=((10, 14), {"ik": (150, 330)}), arms_behind=(False, True), props={1: mic}, tail=math.sin(t * 2) * 0.3)
             if turn < 0:
                 person(L, C.ELLI, "front", ex, 640 + 1700 + breath, 1700, X0, Y0, k, pf, shadow=False)
             else:
@@ -339,16 +379,16 @@ class Field:
             cx = lerp(1450, 690, u)
             sc = 0.62
             if u < 1:
-                Hm.side(L.c.sub(cx, 700, sc, -1), C.CLARK, dict(legs="walk", phase=(t - ci) * 8))
+                Hm.side(L.c.sub(cx, 700, sc, -1), C.CLARK, dict(legs="walk", phase=(1450 - cx) / Hm.step_per_radian(1700 * sc)))
             else:
                 talk = TL.mouth(["cop"], t)
-                stop_ = t > TL.LINE["c1"][0] + 0.3
-                pose = ({"ik": (-270, 180)}, {"ik": (120, 960)}) if stop_ else ({"ik": (-120, 960)}, {"ik": (120, 960)})
+                w_ = ramp(t, TL.LINE["c1"][0] + 0.2, TL.LINE["c1"][0] + 0.6)
+                pose = ({"ik": lerp2((-120, 960), (-270, 180), w_)}, {"ik": (120, 960)})
                 Hm.front(L.c.sub(cx, 700, sc), C.CLARK, dict(face=dict(turn=-0.25, gaze=-0.7, gy=0.3, blink=TL.blink(t, 4), mouth=talk, brows=-0.5),
-                                                            arms=pose, hand_scale=(1.1, 1.0), palm=(stop_, False)))
-        ph = lt * 2 * math.pi * 1.6 if walking else 0
-        Hm.back(L.c.sub(400, 650 + bob * 0.3, 0.72), C.ELLI, dict(legs="walk" if walking else "stand", phase=ph, arms=((14, 30), (8, 10)), props={-1: mic},
-                                                                tail=math.sin(lt * 6) * 0.5))
+                                                            arms=pose, hand_scale=(lerp(1.0, 1.1, w_), 1.0), palm=(w_ > 0.6, False)))
+        ph = min(lt, stop - E0) * 2 * math.pi * 1.0
+        Hm.back(L.c.sub(400, 650, 0.72), C.ELLI, dict(legs="walk" if walking else "stand", phase=ph, arms=((10, 14), {"ik": (150, 330)}), arms_behind=(False, True),
+                                                    props={1: mic}, tail=math.sin(lt * 6) * 0.5))
         L.put(out, mult=(0.62, 0.52, 0.54), tint=z.flash_tint(t) * 0.9, rim_k=1.0)
         dx, dy, rot = shake(t, 7, 0.6, 2)
         return camera(out, dx, dy + bob, rot)
@@ -362,34 +402,27 @@ class Field:
         return (X0r + 610 / k0, Y0r + 340 / k0 + 1840 / k0, 1840 / k0), (X0r + 130 / k0, Y0r + 760 / k0 + 1955 / k0, 1955 / k0)
 
     def clark_pose(self, t):
+        """Жесты Кларкса плавно перетекают: руки на ремне -> «стоп» -> ладонь к объективу."""
         sp = TL.mouth(["cop", "clark"], t)
         talking = TL.talking("cop", t) or TL.talking("clark", t)
         brows, smile = (-0.6, -0.3) if talking else (-0.3, -0.2)
-        arms = ({"ik": (-120, 960)}, {"ik": (120, 960)})
-        hs = (1.0, 1.0)
-        palm_ = (False, False)
-        c3 = TL.LINE["c3"]
-        palm_ = (False, False)
-        if c3[0] + 1.2 < t < c3[0] + c3[1] + 0.3:
-            arms = ({"ik": (-270, 180)}, {"ik": (120, 960)})
-            hs = (1.2, 1.0)
+        idle, stop, lens = (-120, 960), (-270, 180), (-90, 300)
+        c3, c4 = TL.LINE["c3"], TL.LINE["c4"]
+        w_stop = smooth_pulse(t, c3[0] + 1.0, 0.4, c3[1] - 1.0, 0.0) if t < c4[0] else 1.0
+        if c3[0] + c3[1] < t < c4[0]:
+            w_stop = 1 - ease((t - c3[0] - c3[1]) / 0.5) * (1 - ease((t - c4[0] + 0.5) / 0.5))
+        r = ramp(t, c4[0], c4[0] + c4[1]) if t > c4[0] else 0.0
+        tgt = lerp2(lerp2(idle, stop, w_stop), lens, r)
+        hs = lerp(lerp(1.0, 1.2, w_stop), 2.0, r)
+        if w_stop > 0.3 or r > 0:
             brows = -1.0
-            palm_ = (True, False)
-        c4 = TL.LINE["c4"]
-        if t > c4[0]:
-            r = ramp(t, c4[0], c4[0] + c4[1])
-            arms = ({"ik": (lerp(-270, -90, r), lerp(180, 300, r))}, {"ik": (120, 960)})
-            hs = (lerp(1.2, 2.1, r), 1.0)
-            brows = -1.0
-            palm_ = (True, False)
-        gaze = -0.75
-        face = dict(turn=-0.25, gaze=gaze, gy=0.35, blink=TL.blink(t, 4), mouth=sp, brows=brows, smile=smile)
-        return dict(face=face, arms=arms, hand_scale=hs, palm=palm_, breath=math.sin(t * 1.4))
+        face = dict(turn=-0.25, gaze=-0.75, gy=0.35, blink=TL.blink(t, 4), mouth=sp, brows=brows, smile=smile)
+        return dict(face=face, arms=({"ik": tgt}, {"ik": (120, 960)}), hand_scale=(hs, 1.0), palm=(w_stop > 0.55 or r > 0, False), breath=math.sin(t * 1.4))
 
     def elli_back_pose(self, t, mic_in=True):
         talking = TL.talking("elli", t)
         arm_r = {"ik": (250, 330 - 30 * TL.mouth(["elli"], t))} if mic_in else (10, 10)
-        return dict(arms=((10, 14), arm_r), props={1: mic} if mic_in else {}, tail=math.sin(t * 1.5) * 0.2)
+        return dict(arms=((10, 14), arm_r), arms_behind=(False, mic_in), props={1: mic} if mic_in else {}, tail=math.sin(t * 1.5) * 0.2)
 
     def standoff(self, t):
         lt = t - TL.SHOTS[[s[0] for s in TL.SHOTS].index("standoff")][1]
@@ -448,21 +481,8 @@ class Field:
             person(L, C.CLARK, "front", cx, cf, chw, X0, Y0, k, dict(face=dict(brows=1.0, mouth=0.8, gaze=0, blink=0)), shadow=False)
         elif b < 0.9:
             turn_person(L, C.CLARK, cx, cf, chw, X0, Y0, k, (b - 0.5) / 0.4, dict(face=dict(brows=1.0, mouth=0.8)), dict())
-        elif t < EV["draw"]:
-            person(L, C.CLARK, "back", cx, cf, chw, X0, Y0, k, dict(), shadow=False)
         else:
-            shots0 = EV["shots0"]
-            st = (t - shots0) % 0.34 if t > shots0 else 1
-            recoil = max(0, 1 - st / 0.1)
-            aim = ramp(t, EV["draw"], EV["draw"] + 0.4)
-            a1 = lerp(10, 88 + recoil * 8, aim)
-            g = person(L, C.CLARK, "side", cx, cf, chw, X0, Y0, k, dict(arm=(a1, 0), arm_far=(a1 - 4, 0), prop=gun), fx=-1, shadow=False)
-            if t > shots0 and st < 0.05:
-                sc = chw / 1700 * k
-                gx = (cx - X0) * k - 690 * sc
-                gy = (cf - chw - Y0) * k + 300 * sc
-                L.glows.append((gx, gy, int(160 * sc + 20), (255, 230, 150), 1.4))
-                L.glows.append((gx, gy, int(520 * sc), (255, 160, 60), 0.45))
+            self.clark_shoot_back(L, t, cx, cf, chw, X0, Y0, k)
         L.put(out, mult=(0.6, 0.52, 0.5), tint=z.flash_tint(t) * 0.8, rim_k=1.1)
         L.emit(out)
         # Элли: микрофон падает из рук
@@ -472,8 +492,8 @@ class Field:
         if drop:
             u = t - EV["mic_drop"]
             sc = ehw / 1700 * k
-            hx = (ex - X0) * k + 200 * sc
-            hy = (ef - ehw - Y0) * k + 520 * sc
+            hx = (ex - X0) * k + 250 * sc
+            hy = (ef - ehw - Y0) * k + 330 * sc
             ground = (ef - Y0) * k - 40 * sc
             yy = min(ground, hy + 0.5 * 4200 * u * u * sc)
             bounce = 0
@@ -490,6 +510,35 @@ class Field:
         amp = 46 * math.exp(-b * 1.4) + 6
         dx, dy, rot = shake(t, amp, 1.6, 4)
         return camera(out, dx, dy, rot)
+
+    def clark_shoot_back(self, L, t, cx, cf, chw, X0, Y0, k):
+        """Кларкс спиной к нам: выхватывает пистолет из кобуры на поясе и стреляет вперёд — в мутантов."""
+        d0, s0 = EV["draw"], EV["shots0"]
+        grab = ramp(t, d0 - 0.45, d0 - 0.1)               # рука к кобуре
+        raise_ = ramp(t, d0, d0 + 0.45)                   # вскидывает оружие
+        holster, aim = (200, 990), (40, 300)
+        st = (t - s0) % 0.34 if t > s0 else 1.0
+        recoil = max(0.0, 1 - st / 0.1) if t > s0 else 0.0
+        if raise_ <= 0:
+            arm_r = {"ik": lerp2((150, 930), holster, grab)}
+            arm_l = (10, 8)
+            behind = (False, False)
+            props = {1: gun} if grab > 0.95 else {}
+        else:
+            arm_r = {"ik": lerp2(holster, (aim[0], aim[1] - recoil * 30), raise_)}
+            arm_l = {"ik": lerp2((-150, 930), (-40, aim[1] - recoil * 30), raise_)}
+            behind = (raise_ > 0.6, raise_ > 0.6)        # руки вытянуты вперёд — за корпусом
+            props = {1: gun}
+        person(L, C.CLARK, "back", cx, cf, chw, X0, Y0, k, dict(arms=(arm_l, arm_r), arms_behind=behind, props=props), shadow=False)
+        if raise_ > 0.6:
+            sc = chw / 1700 * k
+            aim_elbows(L.c.sub((cx - X0) * k, (cf - chw - Y0) * k, sc), C.CLARK, recoil)
+        if t > s0 and st < 0.05:
+            sc = chw / 1700 * k
+            gx = (cx - X0) * k
+            gy = (cf - chw - Y0) * k + 260 * sc
+            L.glows.append((gx, gy - 60 * sc, int(240 * sc + 20), (255, 230, 150), 1.3))
+            L.glows.append((gx, gy, int(700 * sc), (255, 160, 60), 0.4))
 
     def boom_fx(self, out, b, X0, Y0, k):
         """Красивый взрыв: ударная волна, искры, обломки, вспышки вторичных взрывов."""
@@ -544,14 +593,15 @@ class Field:
         x, y = (120 - X0) * k, (1235 - Y0) * k
         M.c.im.paste(self.corpse.resize((int(self.corpse.width * 0.11 * k), int(self.corpse.height * 0.11 * k))), (int((x - 100 * k) * AS), int((y - 30 * k) * AS)),
                      self.corpse.resize((int(self.corpse.width * 0.11 * k), int(self.corpse.height * 0.11 * k))))
-        A.mutant(M.c.sub(x + 10, y - 150 * k * 0.16 * 1.3, 0.2 * k), t, 1, walk=t * 20)
-        # Кларкс стреляет справа (в профиль)
+        A.mutant(M.c.sub(x + 10, y - 60 * k * 0.16, 0.17 * k), t, 1, walk=t * 20)   # монстр на поверженном полицейском — ниже, на земле
+        # Кларкс справа спиной к нам стреляет вперёд по мутантам
         st = (t % 0.3)
         recoil = max(0, 1 - st / 0.1)
         sc = 0.5
-        Hm.side(M.c.sub(880, 760, sc, -1), C.CLARK, dict(arm=(88 + recoil * 8, 0), arm_far=(84, 0), prop=gun))
+        Hm.back(M.c.sub(880, 760, sc), C.CLARK, dict(arms=({"ik": (-40, 300 - recoil * 30)}, {"ik": (40, 300 - recoil * 30)}), arms_behind=(True, True), props={1: gun}))
+        aim_elbows(M.c.sub(880, 760, sc), C.CLARK, recoil)
         if st < 0.05:
-            M.glows.append((880 - 690 * sc, 760 + 300 * sc, 90, (255, 230, 150), 1.3))
+            M.glows.append((880, 760 + 200 * sc, 110, (255, 230, 150), 1.3))
         M.put(out, mult=(0.5, 0.44, 0.44), tint=z.flash_tint(t) * 0.6, rim_k=1.0)
         M.emit(out)
         # Элли поворачивается к камере (лицо видно, испугана) и убегает
@@ -610,13 +660,14 @@ class Field:
         cimg.alpha_composite(cp, (int(330 - sx), int(1380 - sy)))
         out = np.asarray(cimg.convert("RGB"), np.float32) / 255
         L = Layer()
-        person(L, C.COP2, "side", 200 + lt * 60, 1150 - sy + 90, 300, 0, 0, 1.0, dict(legs="run", phase=t * 12), fx=-1)
-        person(L, C.FIRE, "side", 880 - lt * 40, 1100 - sy + 90, 250, 0, 0, 1.0, dict(legs="run", phase=t * 12 + 1))
+        d1, d2 = lt * 260, lt * 220
+        person(L, C.COP2, "side", 300 - d1, 1150 - sy + 90, 300, 0, 0, 1.0, dict(legs="run", phase=d1 / Hm.step_per_radian(300, "run")), fx=-1)
+        person(L, C.FIRE, "side", 760 + d2, 1100 - sy + 90, 250, 0, 0, 1.0, dict(legs="run", phase=d2 / Hm.step_per_radian(250, "run") + 1))
         A.mutant(L.c.sub(360, 900 - sy + 90, 0.12), t, 2, walk=t * 20)
         # Элли бежит: наклон вперёд, руки работают, хвост раскачивается
         esc = 0.56 - lt * 0.04
         Hm.back(L.c.sub(520 + math.sin(lt * 3) * 30, 760 - sy + 90 - lt * 40 + abs(math.sin(lt * 12)) * 20, esc), C.ELLI,
-                dict(legs="run", phase=lt * 12, arms=((16, 40), (16, 40)), tail=math.sin(lt * 12) * 0.8))
+                dict(legs="run", phase=lt * 12, arms=((24 + 10 * math.sin(lt * 12), 12), (24 - 10 * math.sin(lt * 12), 12)), no_swing=True, tail=math.sin(lt * 12) * 0.8))
         L.put(out, mult=(0.9, 0.66, 0.56), tint=(0.03, 0.0, 0.02), rim=(0.4, 0.5, 1.0), rim_k=0.4, rim_dirs=((0, 8, 1.0),))
         # человек-паук: спускается сверху на паутине, потом прыгает на камеру
         s0, d0 = EV["spider"], EV["drop"]
@@ -637,7 +688,7 @@ class Field:
             eyes = A.spider(S.c.sub(x, y, sc), t, spread=spread)
             for ex, ey in eyes:
                 S.glows.append((x + ex * sc, y + ey * sc, max(6, int(50 * sc)), (255, 30, 20), 1.1))
-            S.put(out, mult=(0.8, 0.6, 0.55), tint=(0.02, 0, 0.02), rim=(0.7, 0.35, 1.0), rim_k=0.9)
+            S.put(out, mult=(0.8, 0.66, 0.6), tint=(0.0, 0, 0.0), rim=(0.55, 0.55, 0.6), rim_k=0.6)
             S.emit(out)
         a = 12 + 10 * (lt > 3.5)
         dx, dy, rot = shake(t, a, 1.8, 8)

@@ -143,10 +143,21 @@ class Ad:
             happy = TL.talking("boy", t) or u > 1.4
             face = dict(turn=0.0, gaze=0.0, blink=1.0 if (happy and not TL.talking("boy", t) and u > 2.0) else TL.blink(t, 9), mouth=max(mo, chew),
                         smile=1.0 if happy else 0.5, brows=0.6 if happy else 0.2)
-            tgt = (lerp(120, 30, spoon), lerp(560, 190, spoon))
-            wr = Hm.front(c.sub(540, 300, 1.05), C.BOY, dict(face=face, arms=({"ik": (-200, 560)}, {"ik": tgt}),
-                                                              props={1: lambda cc, p, a: (cc.line([p, (p[0] - 40, p[1] - 110)], (200, 200, 210, 255), 14),
-                                                                                         cc.ell((p[0] - 80, p[1] - 150, p[0] - 10, p[1] - 100), (210, 210, 220, 255)))}))
+            # левая рука держит миску за край, правая подносит ложку ко рту
+            tgt = (lerp(110, 40, spoon), lerp(860, 300, spoon))
+            hum = TL.LINE["b1"][0] <= t < TL.LINE["b1"][0] + 0.95
+            if hum:   # «Ммм» — рот закрыт, довольная улыбка, глаза зажмурены
+                face.update(mouth=0.0, smile=1.0, blink=1.0, brows=0.7)
+
+            def spoon_prop(cc, p, a, full=spoon < 0.95):
+                tip = (p[0] - 46, p[1] - 150)
+                cc.line([(p[0] + 6, p[1] + 20), tip], (205, 205, 215, 255), 14)
+                cc.ell((tip[0] - 34, tip[1] - 30, tip[0] + 30, tip[1] + 14), (215, 215, 225, 255))
+                if full:
+                    flake(cc, tip[0] - 2, tip[1] - 10, 16, 0.4)
+            spoon_prop.under_hand = True
+            Hm.front(c.sub(540, 300, 1.05), C.BOY, dict(face=face, arms=({"ik": (-236, 880)}, {"ik": tgt}), props={1: spoon_prop},
+                                                       hand_mode={-1: "grip"}))
             c.rect((0, 1350, W, H), (250, 220, 170, 255))      # стол перед мальчиком
             c.rect((0, 1350, W, 1380), (220, 180, 130, 255))
             for k in range(6):

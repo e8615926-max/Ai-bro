@@ -70,7 +70,7 @@ def photo(c, x0, y0, x1, y1):
     c.rect((x0 + 6, y0 + 6, x1 - 6, y1 - 6), (150, 98, 54, 255))
     c.rect((x0 + 12, y0 + 12, x1 - 12, y1 - 12), (110, 70, 38, 255))
     c.rect((x0 + 22, y0 + 22, x1 - 22, y1 - 22), (236, 228, 206, 255))
-    px0, py0, px1, py1 = x0 + 38, y0 + 38, x1 - 38, y1 - 38
+    px0, py0, px1, py1 = x0 + 38, y0 + 38, x1 - 38, y1 - 70
     pw, ph = px1 - px0, py1 - py0
     p = Cv(pw, ph, c.s * 2)
     # небо, озеро, берёзы
@@ -92,6 +92,7 @@ def photo(c, x0, y0, x1, y1):
     a[..., :3] = np.clip(rgb, 0, 255)
     c.im.alpha_composite(Image.fromarray(a.astype(np.uint8)), (int(px0 * c.s + c.ox), int(py0 * c.s + c.oy)))
     c.rect((px0, py0, px1, py1), None, outline=(200, 190, 170, 255), width=3)
+    c.text(((x0 + x1) / 2, y1 - 46), "Андрей и Саша", 24, (80, 56, 36, 255), FONT_SERIF, anchor="mm")
 
 
 def floor(c):
@@ -228,7 +229,7 @@ def beer_mug(c, x, y, sc=1.0, side=-1, level=0.8):
         c.circ(bx - 20 * sc + k * 13 * sc, top + h * 0.6 + (k % 2) * 20 * sc, 3 * sc, (255, 220, 150, 200))
     c.ell((bx - w2 + 2 * sc, top + h * (1 - level) - 18 * sc, bx + w2 - 2 * sc, top + h * (1 - level) + 12 * sc), (250, 246, 232, 255))
     c.rect((bx - w2, top + h - 14 * sc, bx + w2, top + h), (200, 214, 222, 200), r=6 * sc)
-    c.arc((x - 30 * sc, y - 46 * sc, x + 30 * sc, y + 46 * sc), 0, 360, (210, 222, 230, 220), 10 * sc)
+    c.arc((x + side * 22 * sc - 30 * sc, y - 46 * sc, x + side * 22 * sc + 30 * sc, y + 46 * sc), 0, 360, (210, 222, 230, 220), 10 * sc)
     c.line([(bx - w2 + 10 * sc, top + 14 * sc), (bx - w2 + 10 * sc, top + h - 20 * sc)], (255, 255, 255, 140), 5 * sc)
 
 
@@ -346,21 +347,17 @@ class Room:
 
 # --- позы ------------------------------------------------------------------
 ANDREY_SC = 0.6
-A_X, A_TOP = 300, 600
+A_X, A_TOP = 250, 600
 
 
-def andrey_seated(c, k, X0, Y0, t, face, hand_r, hand_l=None, mug=True, stand=0.0, leg_down=0.0):
-    """Андрей на диване. stand 0..1 — вставание, leg_down 0..1 — опускает ногу с дивана."""
+def andrey_seated(c, k, X0, Y0, t, face, hand_r, hand_l=None, mug=True, stand=0.0, leg_down=0.0, mug_tilt=0.0):
+    """Андрей на диване, обе ноги на полу. stand 0..1 — встаёт."""
     sc = ANDREY_SC * k
-    top = A_TOP - 64 * ease(stand) + 4 * math.sin(t * 1.6) * (1 - stand)
+    top = A_TOP - 64 * ease(stand) + 3 * math.sin(t * 1.6) * (1 - stand)
     x = (A_X + 30 * ease(stand) - X0) * k
     y = (top - Y0) * k
-    # колени/ступни (локальные коорд.)
-    knee_l = (-118, 1190)
-    ank_l = (-112, 1600)
-    u = ease(leg_down)
-    knee_r = (260 * (1 - u) + 86 * u, 860 * (1 - u) + 1215 * u)
-    ank_r = (390 * (1 - u) + 92 * u, 960 * (1 - u) + 1600 * u)
+    knee_l, ank_l = (-138, 1150), (-126, 1615)
+    knee_r, ank_r = (138, 1150), (126, 1615)
     s = ease(stand)
     if s > 0:
         knee_l = (knee_l[0] * (1 - s) - 62 * s, knee_l[1] * (1 - s) + 1320 * s)
@@ -370,9 +367,9 @@ def andrey_seated(c, k, X0, Y0, t, face, hand_r, hand_l=None, mug=True, stand=0.
     props = {}
     if mug:
         props[-1] = lambda cc, p, a: beer_mug(cc, p[0], p[1], 1.0, -1)
-    arms = (hand_r, hand_l if hand_l is not None else {"ik": (knee_r[0] - 40, knee_r[1] - 40)})
+    arms = (hand_r, hand_l if hand_l is not None else {"ik": (knee_r[0] - 10, knee_r[1] - 70)})
     return Hm.front(c.sub(x, y, sc), C.ANDREY, dict(face=face, legs="sit", sit={-1: (knee_l, ank_l), 1: (knee_r, ank_r)}, arms=arms, props=props,
-                                                     breath=math.sin(t * 1.6)))
+                                                     hand_mode={1: "relax"}, breath=math.sin(t * 1.6)))
 
 
 def armrest_local(X0, Y0, k, stand=0.0):

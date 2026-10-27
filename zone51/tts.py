@@ -51,6 +51,16 @@ def main():
             gap = 0.5 if text.rstrip().endswith(("...", "..")) else 0.22
             parts.append(np.zeros(int(gap * SR), np.float32))
         a = np.concatenate(parts[:-1])
+        if "hum" in opt:   # «Ммм» — синтезированное мычание с закрытым ртом перед репликой
+            n = int(opt["hum"] * SR)
+            tt = np.arange(n) / SR
+            f0 = 330 * (1 + 0.06 * np.sin(np.pi * tt / opt["hum"])) * (1 + 0.012 * np.sin(2 * np.pi * 5.5 * tt))
+            ph = 2 * np.pi * np.cumsum(f0) / SR
+            hum = sum(np.sin(ph * k) / k ** 1.6 for k in range(1, 12))
+            from scipy.signal import butter, sosfilt
+            hum = sosfilt(butter(2, [200, 1200], "band", fs=SR, output="sos"), hum) * np.sin(np.pi * tt / opt["hum"]) ** 0.6
+            hum = (hum / (np.abs(hum).max() + 1e-6) * np.abs(a).max() * 0.7).astype(np.float32)
+            a = np.concatenate([hum, np.zeros(int(0.15 * SR), np.float32), a])
         if "stretch" in opt:
             tmp = os.path.join(OUT, lid + "_st")
             import soundfile as sf

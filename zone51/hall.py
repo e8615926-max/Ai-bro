@@ -25,7 +25,7 @@ def ramp(t, t0, t1):
     return ease((t - t0) / max(1e-3, t1 - t0))
 
 
-def pie(c, x, y, sc=1.0):
+def pie(c, x, y, sc=1.0, t=0.0):
     c.ell((x - 150 * sc, y - 34 * sc, x + 150 * sc, y + 46 * sc), (236, 236, 240, 255))      # тарелка
     c.ell((x - 136 * sc, y - 60 * sc, x + 136 * sc, y + 30 * sc), (196, 126, 56, 255))
     c.ell((x - 124 * sc, y - 70 * sc, x + 124 * sc, y + 10 * sc), (226, 160, 74, 255))
@@ -33,8 +33,26 @@ def pie(c, x, y, sc=1.0):
         c.line([(x + k * 30 * sc - 30 * sc, y - 62 * sc), (x + k * 30 * sc + 30 * sc, y + 4 * sc)], (190, 116, 46, 255), 8 * sc)
         c.line([(x + k * 30 * sc + 30 * sc, y - 62 * sc), (x + k * 30 * sc - 30 * sc, y + 4 * sc)], (190, 116, 46, 255), 8 * sc)
     c.ell((x - 124 * sc, y - 70 * sc, x + 124 * sc, y + 10 * sc), None, outline=(170, 100, 40, 255), width=6 * sc)
-    for k in range(3):   # пар от тёплого пирога
-        c.line([(x - 40 * sc + k * 40 * sc, y - 80 * sc), (x - 30 * sc + k * 40 * sc, y - 130 * sc), (x - 44 * sc + k * 40 * sc, y - 180 * sc)], (255, 255, 255, 60), 10 * sc, smooth=True)
+    for k in range(4):   # пар от тёплого пирога: поднимается и колышется
+        ph = (t * 0.55 + k * 0.25) % 1.0
+        a = int(90 * math.sin(math.pi * ph))
+        bx = x - 60 * sc + k * 40 * sc
+        pts = [(bx + 14 * sc * math.sin(t * 2.4 + k + j * 0.9), y - 80 * sc - ph * 90 * sc - j * 38 * sc) for j in range(4)]
+        c.line(pts, (255, 255, 255, a), (12 - 2 * ph * 4) * sc, smooth=True)
+
+
+def lerp2(a, b, u):
+    return (a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u)
+
+
+def smooth_pulse(t, t0, up, hold, down):
+    if t < t0 or t > t0 + up + hold + down:
+        return 0.0
+    if t < t0 + up:
+        return ease((t - t0) / up)
+    if t < t0 + up + hold:
+        return 1.0
+    return 1 - ease((t - t0 - up - hold) / down)
 
 
 def mama_front(c, x, y, sc, t, mouth=0.0, smile=0.6, turn=0.0, gaze=None, with_pie=True, phase=None):
@@ -45,7 +63,7 @@ def mama_front(c, x, y, sc, t, mouth=0.0, smile=0.6, turn=0.0, gaze=None, with_p
         p["phase"] = phase
     Hm.front(c.sub(x, y, sc), C.MAMA, p)
     if with_pie:
-        pie(c, x, y + 600 * sc, sc * 0.8)
+        pie(c, x, y + 600 * sc, sc * 0.8, t)
 
 
 class Hall:
@@ -251,11 +269,12 @@ class HallScenes:
             sc = 0.72
             if t < A1:
                 x = lerp(-60, 470, u)
-                Hm.side(c.sub((x - X0) * k, (1700 - 1700 * sc - Y0) * k, sc * k), C.ANDREY, dict(legs="walk", phase=(t - A0) * 8.2, blink=TL.blink(t, 1)))
+                Hm.side(c.sub((x - X0) * k, (1700 - 1700 * sc - Y0) * k, sc * k), C.ANDREY, dict(legs="walk", phase=(x + 60) / Hm.step_per_radian(1700 * sc), blink=TL.blink(t, 1)))
             else:
                 lean = ramp(t, EV["peep"] - 0.8, EV["peep"])
+                # тянется к глазку: рука впереди него, поэтому за корпусом
                 Hm.back(c.sub((540 - X0) * k, (1700 - 1700 * sc - Y0 + 20 * lean) * k, sc * k), C.ANDREY,
-                        dict(arms=((10, 8), (30, 120 * lean)) if lean > 0 else ((10, 8), (10, 8))))
+                        dict(arms=((10, 8), {"ik": lerp2((150, 930), (70, 330), lean)}), arms_behind=(False, lean > 0.05)))
         w = lerp(1180, 1000, ramp(t, A0, A1 + 3))
         return self.h.view(t, 540, 1000, w, actors)
 
@@ -340,12 +359,13 @@ class HallScenes:
                 smile, brows = -0.2, 1.0
             if t > EV["creep0"] + 2.5:
                 turn, gaze = 0.7, 1.0
-            arms = ((10, 10), (10, 10))
-            a7 = TL.LINE["a7"]
-            if a7[0] < t < a7[0] + a7[1] + 0.4:
-                arms = ((10, 10), {"ik": (560, 380)})
-            if TL.LINE["a8"][0] < t < TL.LINE["a8"][0] + 2.0:
-                arms = ({"ik": (-220, 500)}, {"ik": (220, 500)})
+            a7, a8 = TL.LINE["a7"], TL.LINE["a8"]
+            pnt = smooth_pulse(t, a7[0] - 0.1, 0.4, a7[1] - 0.2, 0.5)        # показывает направо, на кухню
+            gst = smooth_pulse(t, a8[0], 0.35, 2.2, 0.5)                    # радостный жест обеими руками
+            arm_l = {"ik": lerp2((-150, 930), (-230, 640), gst)}
+            arm_r = {"ik": lerp2(lerp2((150, 930), (230, 640), gst), (560, 400), pnt)}
+            arms = (arm_l, arm_r)
+            hmode = {1: "point" if pnt > 0.6 else "relax"}
             sigh = 0.0
             if EV["sigh"] < t < EV["sigh"] + 1.3:
                 sigh = math.sin(math.pi * (t - EV["sigh"]) / 1.3)
@@ -355,33 +375,33 @@ class HallScenes:
             else:
                 walking = EV["sigh"] + 0.6 < t < EV["toilet0"]
                 if walking:
-                    Hm.side(c.sub(*T(a_x, 1700 - 1700 * sc), sc * k), C.ANDREY, dict(legs="walk", phase=t * 8))
+                    Hm.side(c.sub(*T(a_x, 1700 - 1700 * sc), sc * k), C.ANDREY, dict(legs="walk", phase=a_x / Hm.step_per_radian(1700 * sc)))
                 else:
                     Hm.front(c.sub(*T(a_x, 1700 - 1700 * sc + 14 * sigh), sc * k), C.ANDREY,
                              dict(face=dict(turn=turn, gaze=gaze, blink=max(TL.blink(t, 1), sigh * 0.8), mouth=mo, smile=smile, brows=brows - sigh * 0.6),
-                                  arms=arms, breath=math.sin(t * 1.6) + sigh * 2))
+                                  arms=arms, hand_mode=hmode, breath=math.sin(t * 1.6) + sigh * 2))
             # мама: входит, говорит, уходит направо
             if mi0 <= t < EV["mama_go"] + 1.6:
                 if t < mi1:
                     u = ramp(t, mi0, mi1)
                     msc = lerp(0.42, 0.68, u)
                     mx = lerp(540, 640, u)
-                    mama_front(c, *T(mx, lerp(720, 1700 - 1700 * 0.68, u)), msc * k, t, smile=0.7, phase=(t - mi0) * 7)
+                    mama_front(c, *T(mx, lerp(720, 1700 - 1700 * 0.68, u)), msc * k, t, smile=0.7, turn=-0.3, gaze=-0.85, phase=(t - mi0) * 5)
                 elif t < EV["mama_go"]:
                     mmo = TL.mouth(["mama"], t)
                     mama_front(c, *T(640, 1700 - 1700 * 0.68), 0.68 * k, t, mouth=mmo, smile=0.6 if mmo < 0.1 else 0.4, turn=-0.45, gaze=-0.9)
                 else:
                     u = (t - EV["mama_go"]) / 1.6
                     mx = lerp(640, 1150, u)
-                    Hm.side(c.sub(*T(mx, 1700 - 1700 * 0.66), 0.66 * k), C.MAMA, dict(legs="walk", phase=(t - EV["mama_go"]) * 7.5,
-                            prop=lambda cc, p, a: pie(cc, p[0] + 60, p[1] - 40, 0.8)))
+                    Hm.side(c.sub(*T(mx, 1700 - 1700 * 0.66), 0.66 * k), C.MAMA, dict(legs="walk", phase=mx / Hm.step_per_radian(1700 * 0.66),
+                            prop=lambda cc, p, a: pie(cc, p[0] + 60, p[1] - 40, 0.8, t)))
             # Саша выходит из туалета
             if t > EV["toilet0"] + 0.4:
                 ssc = 0.7
                 if t < EV["toilet1"]:
                     u = ramp(t, EV["toilet0"] + 0.4, EV["toilet1"])
                     sx = lerp(-20, 180, u)
-                    Hm.side(c.sub(*T(sx, 1700 - 1700 * ssc), ssc * k), C.SASHA, dict(legs="walk", phase=t * 8))
+                    Hm.side(c.sub(*T(sx, 1700 - 1700 * ssc), ssc * k), C.SASHA, dict(legs="walk", phase=sx / Hm.step_per_radian(1700 * ssc)))
                 else:
                     smo = TL.mouth(["sasha"], t)
                     st, sg, sb, ssm = 0.55, 1.0, 0.0, 0.0

@@ -286,12 +286,12 @@ CRACK = _crack_img()
 def watermark():
     c = Image.new("RGBA", (W, 120), (0, 0, 0, 0))
     d = ImageDraw.Draw(c)
-    f = font(34, "/usr/share/fonts/opentype/inter/InterDisplay-Light.otf")
+    f = font(46, "/usr/share/fonts/opentype/inter/InterDisplay-Light.otf")
     txt = "ELDAR COMPANY"
-    sp = 9
+    sp = 12
     tw = sum(f.getlength(ch) for ch in txt) + sp * (len(txt) - 1)
     x = W / 2 - tw / 2
-    y = 46
+    y = 52
     for ch in txt:
         d.text((x, y), ch, font=f, fill=(255, 255, 255, 140), anchor="lm")
         x += f.getlength(ch) + sp
