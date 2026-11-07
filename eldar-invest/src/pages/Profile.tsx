@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
+import { SafeForm } from '@/components/ui/SafeForm';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays, KeyRound, Mail, RotateCcw, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -29,8 +30,8 @@ export default function Profile() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const trades = data.transactions.filter((t) => t.type !== 'deposit').length;
 
-  async function saveName(e: FormEvent) {
-    e.preventDefault();
+  async function saveName() {
+    if (saving) return;
     if (name.trim().length < 2) return toast.error('Name is too short');
     setSaving(true);
     try {
@@ -76,7 +77,7 @@ export default function Profile() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader title="Personal details" />
-          <form className="space-y-4 p-5 sm:p-6" onSubmit={saveName}>
+          <SafeForm className="space-y-4 p-5 sm:p-6" onSubmit={saveName}>
             <Input label="Full name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
             <Input label="Email" value={data.profile.email} disabled hint="Email is used to sign in and cannot be changed in the demo." />
             <div>
@@ -96,10 +97,10 @@ export default function Profile() {
                 ))}
               </div>
             </div>
-            <Button type="submit" loading={saving} disabled={name.trim() === data.profile.name}>
+            <Button loading={saving} disabled={name.trim() === data.profile.name} onClick={saveName}>
               Save changes
             </Button>
-          </form>
+          </SafeForm>
         </Card>
         <ChangePassword />
       </div>
@@ -159,8 +160,8 @@ function ChangePassword() {
   const [errors, setErrors] = useState<Record<string, string | null>>({});
   const [busy, setBusy] = useState(false);
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function onSubmit() {
+    if (busy) return;
     const errs = {
       current: current ? null : 'Enter your current password.',
       next: validatePassword(next),
@@ -185,14 +186,14 @@ function ChangePassword() {
   return (
     <Card>
       <CardHeader title="Security" subtitle="Change your password" />
-      <form className="space-y-4 p-5 sm:p-6" onSubmit={onSubmit} noValidate>
+      <SafeForm className="space-y-4 p-5 sm:p-6" onSubmit={onSubmit}>
         <Input label="Current password" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} error={errors.current} />
         <Input label="New password" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} error={errors.next} />
         <Input label="Confirm new password" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} error={errors.confirm} />
-        <Button type="submit" variant="secondary" icon={<KeyRound size={16} />} loading={busy}>
+        <Button variant="secondary" icon={<KeyRound size={16} />} loading={busy} onClick={onSubmit}>
           Update password
         </Button>
-      </form>
+      </SafeForm>
     </Card>
   );
 }
@@ -203,34 +204,32 @@ function DeleteAccountModal({ open, onClose }: { open: boolean; onClose: () => v
   const [pw, setPw] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  async function submit() {
+    if (busy || !pw) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await del(pw);
+      toast.success('Account deleted');
+      navigate('/register', { replace: true });
+    } catch (err) {
+      setError(err instanceof AuthError ? err.message : 'Could not delete account.');
+      setBusy(false);
+    }
+  }
   return (
     <Modal open={open} onClose={onClose} title="Delete your account?" description="This permanently deletes your profile, virtual portfolio and history. Enter your password to confirm.">
-      <form
-        className="space-y-4 p-6 pt-4"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setBusy(true);
-          setError(null);
-          try {
-            await del(pw);
-            toast.success('Account deleted');
-            navigate('/register', { replace: true });
-          } catch (err) {
-            setError(err instanceof AuthError ? err.message : 'Could not delete account.');
-            setBusy(false);
-          }
-        }}
-      >
+      <SafeForm className="space-y-4 p-6 pt-4" onSubmit={submit}>
         <Input label="Password" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} error={error} />
         <div className="grid grid-cols-2 gap-3">
           <Button variant="secondary" size="lg" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="danger" size="lg" loading={busy} disabled={!pw}>
+          <Button variant="danger" size="lg" loading={busy} disabled={!pw} onClick={submit}>
             Delete
           </Button>
         </div>
-      </form>
+      </SafeForm>
     </Modal>
   );
 }

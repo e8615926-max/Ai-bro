@@ -1,5 +1,5 @@
 import { lazy, useEffect } from 'react';
-import { createBrowserRouter, createHashRouter, Outlet, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, createHashRouter, createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { Toaster } from '@/components/ui/Toaster';
 import { useMarket } from '@/stores/market';
@@ -32,8 +32,20 @@ function Root() {
   );
 }
 
-// Hash routes when opened from disk (standalone build), clean URLs otherwise.
-const createRouter = __STANDALONE__ || window.location.protocol === 'file:' ? createHashRouter : createBrowserRouter;
+/**
+ * Pick a router that works wherever the app is opened:
+ *  - sandboxed previews (srcdoc/blob, opaque "null" origin) can't use URLs → in-memory routes
+ *  - opened from disk or as the standalone file → hash routes
+ *  - normal hosting → clean browser URLs
+ */
+function pickRouter() {
+  const { protocol, origin } = window.location;
+  const opaque = origin === 'null' || protocol === 'about:' || protocol === 'blob:' || protocol === 'data:';
+  if (opaque) return createMemoryRouter;
+  if (__STANDALONE__ || protocol === 'file:') return createHashRouter;
+  return createBrowserRouter;
+}
+const createRouter = pickRouter();
 
 const router = createRouter([
   {

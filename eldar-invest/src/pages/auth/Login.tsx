@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
+import { SafeForm } from '@/components/ui/SafeForm';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Lock, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -15,8 +16,8 @@ export default function Login() {
   const [errors, setErrors] = useState<{ email?: string | null; password?: string | null; form?: string | null }>({});
   const [busy, setBusy] = useState(false);
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function onSubmit() {
+    if (busy) return;
     const next = { email: validateEmail(email), password: password ? null : 'Password is required.' };
     setErrors(next);
     if (next.email || next.password) return;
@@ -33,7 +34,7 @@ export default function Login() {
     <div>
       <h1 className="text-[28px] font-semibold tracking-tight">Welcome back</h1>
       <p className="mt-1.5 text-[15px] text-ink-2">Sign in to your ELDAR INVEST account.</p>
-      <form className="mt-8 space-y-4" onSubmit={onSubmit} noValidate>
+      <SafeForm className="mt-8 space-y-4" onSubmit={onSubmit}>
         {errors.form && (
           <div className="flex items-start gap-2 rounded-xl bg-loss-soft px-3.5 py-3 text-[13.5px] text-loss" role="alert">
             <AlertCircle size={17} className="mt-px shrink-0" /> {errors.form}
@@ -45,10 +46,10 @@ export default function Login() {
           <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 rounded accent-[rgb(var(--brand))]" />
           Keep me signed in on this device
         </label>
-        <Button type="submit" block size="lg" loading={busy} className="!mt-6">
+        <Button block size="lg" loading={busy} className="!mt-6" onClick={onSubmit}>
           Sign in
         </Button>
-      </form>
+      </SafeForm>
       <p className="mt-6 text-center text-[14px] text-ink-2">
         New to ELDAR INVEST?{' '}
         <Link to="/register" className="font-semibold text-brand hover:text-brand-strong">

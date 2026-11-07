@@ -58,3 +58,8 @@ export function writeRaw(key: string, value: string): void {
     /* ignore */
   }
 }
+
+/** False inside sandboxed previews where browser storage is blocked (data won't survive a reload). */
+export function persistentStorageAvailable(): boolean {
+  return store('local') !== null;
+}

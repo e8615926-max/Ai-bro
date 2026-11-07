@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
+import { SafeForm } from '@/components/ui/SafeForm';
 import { Link } from 'react-router-dom';
 import { AlertCircle, Lock, Mail, User } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -18,8 +19,8 @@ export default function Register() {
   const [busy, setBusy] = useState(false);
   const strength = passwordStrength(password);
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function onSubmit() {
+    if (busy) return;
     const next = {
       name: name.trim().length < 2 ? 'Enter your name.' : null,
       email: validateEmail(email),
@@ -42,7 +43,7 @@ export default function Register() {
     <div>
       <h1 className="text-[28px] font-semibold tracking-tight">Create your account</h1>
       <p className="mt-1.5 text-[15px] text-ink-2">Start with $100,000 in virtual money. Free, no card needed.</p>
-      <form className="mt-8 space-y-4" onSubmit={onSubmit} noValidate>
+      <SafeForm className="mt-8 space-y-4" onSubmit={onSubmit}>
         {errors.form && (
           <div className="flex items-start gap-2 rounded-xl bg-loss-soft px-3.5 py-3 text-[13.5px] text-loss" role="alert">
             <AlertCircle size={17} className="mt-px shrink-0" /> {errors.form}
@@ -94,10 +95,10 @@ export default function Register() {
           </label>
           {errors.agree && <p className="ml-6 mt-1 text-[13px] text-loss">{errors.agree}</p>}
         </div>
-        <Button type="submit" block size="lg" loading={busy} className="!mt-6">
+        <Button block size="lg" loading={busy} className="!mt-6" onClick={onSubmit}>
           Create account
         </Button>
-      </form>
+      </SafeForm>
       <p className="mt-6 text-center text-[14px] text-ink-2">
         Already have an account?{' '}
         <Link to="/login" className="font-semibold text-brand hover:text-brand-strong">

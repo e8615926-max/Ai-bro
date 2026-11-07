@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Info, SearchX, Star } from 'lucide-react';
 import { AssetIcon } from '@/components/asset/AssetIcon';
 import { AssetRow } from '@/components/asset/AssetRow';
@@ -42,6 +42,7 @@ function AssetView({ symbol }: { symbol: string }) {
   const asset = getAsset(symbol)!;
   const now = useNow();
   const navigate = useNavigate();
+  const location = useLocation();
   const data = useAccount((s) => s.data)!;
   const toggleWatch = useAccount((s) => s.toggleWatch);
   const openTrade = useUI((s) => s.openTrade);
@@ -73,7 +74,7 @@ function AssetView({ symbol }: { symbol: string }) {
   return (
     <div className="pb-20 lg:pb-0">
       <div className="mb-5 flex items-center justify-between">
-        <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/markets'))} className="-ml-2 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[14px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink">
+        <button onClick={() => (location.key !== 'default' ? navigate(-1) : navigate('/markets'))} className="-ml-2 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[14px] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink">
           <ArrowLeft size={18} /> Back
         </button>
         <IconButton

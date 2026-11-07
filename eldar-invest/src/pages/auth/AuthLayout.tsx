@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { FlaskConical, Lock, ShieldCheck, Sparkles } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/Logo';
 import { Spinner } from '@/components/ui/Spinner';
+import { persistentStorageAvailable } from '@/services/storage';
 import { priceAt } from '@/lib/market';
 import { HOUR } from '@/lib/time';
 import { useNow } from '@/stores/market';
@@ -91,6 +92,11 @@ export function AuthLayout() {
         </div>
         <div className="flex flex-1 items-center justify-center px-5 pb-12 sm:px-8">
           <div className="w-full max-w-[400px] animate-rise">
+            {!persistentStorageAvailable() && (
+              <div className="mb-6 rounded-xl border border-warn/30 bg-warn-soft px-4 py-3 text-[12.5px] leading-relaxed text-warn" role="status">
+                <strong className="font-semibold">Preview mode:</strong> this viewer blocks browser storage, so your account and trades will reset when it closes. Download the file and open it in Chrome, Safari or another browser to keep your data.
+              </div>
+            )}
             <Suspense
               fallback={
                 <div className="flex justify-center py-20 text-ink-3">
