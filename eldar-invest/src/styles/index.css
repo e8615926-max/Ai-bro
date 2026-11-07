@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------- Design tokens (RGB triplets so Tailwind can apply alpha) ---------- */
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+  --bg: 255 255 255;
+  --surface: 255 255 255;
+  --surface-2: 246 248 247;
+  --surface-3: 236 240 238;
+  --line: 230 234 232;
+  --ink: 14 20 17;
+  --ink-2: 82 94 88;
+  --ink-3: 136 148 142;
+  --brand: 16 163 101;
+  --brand-strong: 10 128 79;
+  --brand-soft: 230 247 238;
+  --brand-ink: 255 255 255;
+  --gain: 12 150 92;
+  --gain-soft: 228 246 236;
+  --loss: 222 60 60;
+  --loss-soft: 253 236 236;
+  --warn: 196 128 10;
+  --warn-soft: 253 245 224;
+  --chart-grid: 236 240 238;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: 10 13 12;
+  --surface: 19 24 22;
+  --surface-2: 25 31 29;
+  --surface-3: 35 43 40;
+  --line: 37 45 42;
+  --ink: 238 243 240;
+  --ink-2: 165 177 171;
+  --ink-3: 112 125 119;
+  --brand: 34 197 126;
+  --brand-strong: 52 214 143;
+  --brand-soft: 18 48 35;
+  --brand-ink: 6 22 14;
+  --gain: 46 204 133;
+  --gain-soft: 17 46 33;
+  --loss: 248 100 100;
+  --loss-soft: 56 23 25;
+  --warn: 240 180 60;
+  --warn-soft: 52 40 14;
+  --chart-grid: 33 41 38;
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-bg text-ink antialiased;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    -webkit-tap-highlight-color: transparent;
+  }
+  ::selection { background: rgb(var(--brand) / 0.2); }
+  :focus-visible { outline: 2px solid rgb(var(--brand)); outline-offset: 2px; border-radius: 8px; }
+  input, button, select, textarea { font: inherit; color: inherit; }
+  button { -webkit-tap-highlight-color: transparent; }
+}
+
+@layer components {
+  .card { @apply rounded-2xl border border-line bg-surface shadow-card; }
+  .num { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .label { @apply text-[13px] font-medium text-ink-2; }
+  .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3; }
+  .hairline { @apply border-line; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+  .skeleton { @apply relative overflow-hidden rounded-lg bg-surface-3; }
+  .skeleton::after {
+    content: '';
+    position: absolute; inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(var(--surface) / 0.6), transparent);
+    animation: shimmer 1.4s infinite;
+  }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+}
+
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+html.theme-transition, html.theme-transition * { transition: background-color .25s ease, border-color .25s ease, color .15s ease !important; }
+
+[data-theme='dark'] { --icon-l: 72%; --icon-bg: 16%; }
+
+/* Categorical chart slots — reference palette, light and dark steps. */
+:root, [data-theme='light'] {
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
+  --series-4: #eda100; --series-5: #e87ba4; --series-6: #6250d6;
+  --series-other: #a3aaa6; --series-cash: #d6dcd9;
+}
+[data-theme='dark'] {
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+  --series-4: #c98500; --series-5: #d55181; --series-6: #9085e9;
+  --series-other: #6b746f; --series-cash: #3a4440;
+}
+.chart-line { stroke-dasharray: 4000; stroke-dashoffset: 4000; animation: draw 1s cubic-bezier(.4,0,.2,1) forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+
+/* Grid items shouldn't be widened by long, truncating content. */
+.grid > * { min-width: 0; }
