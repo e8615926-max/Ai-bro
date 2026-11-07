@@ -1,5 +1,5 @@
 import { lazy, useEffect } from 'react';
-import { createBrowserRouter, Outlet, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, createHashRouter, Outlet, RouterProvider } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { Toaster } from '@/components/ui/Toaster';
 import { useMarket } from '@/stores/market';
@@ -32,7 +32,10 @@ function Root() {
   );
 }
 
-const router = createBrowserRouter([
+// Hash routes when opened from disk (standalone build), clean URLs otherwise.
+const createRouter = __STANDALONE__ || window.location.protocol === 'file:' ? createHashRouter : createBrowserRouter;
+
+const router = createRouter([
   {
     element: <Root />,
     children: [

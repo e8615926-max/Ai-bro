@@ -36,7 +36,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
             className="h-11 rounded-xl bg-surface-2 px-5 text-sm font-semibold"
             onClick={() => {
               this.setState({ error: null });
-              window.location.assign('/');
+              window.location.assign(window.location.hash ? '#/' : '/');
             }}
           >
             Go home
