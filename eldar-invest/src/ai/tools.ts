@@ -15,7 +15,7 @@ import { money, percent, shares as fmtShares } from '@/lib/format';
 import { closeOn, priceAt, pricerFor, timeGrid } from '@/lib/market';
 import { DAY, dayEnd, dayNumber } from '@/lib/time';
 import { buildForecast, HORIZON_WEIGHTS, indicators, pctStr, scoreUniverse } from './analytics';
-import { category, tr } from './i18n';
+import { category, describe, tr } from './i18n';
 import { AiError, type ResearchProvider } from './provider';
 import type { Block, CompanyReport, Fundamentals, Indicators, Meta, MetricsTable, Pick, PortfolioAnalysis, Pt, Series, Signal, ToolOutput, TradeProposal, WhatIf } from './types';
 
@@ -291,7 +291,7 @@ async function analyzeCompany(ctx: ToolContext, args: Args): Promise<ToolOutput>
   if (news?.items.length) blocks.push({ type: 'news', title: tr(ctx.lang, 'c.newsFor', { s: symbol }), items: news.items.slice(0, 5), meta: news.meta });
   const fundText = fundamentals ? [fundamentals.pe !== null && `P/E ${n2(fundamentals.pe)}`, fundamentals.revenueGrowth !== null && `${L('m.revG').toLowerCase()} ${pc(fundamentals.revenueGrowth)}`, fundamentals.netMargin !== null && `${L('m.margin').toLowerCase()} ${plainPct(fundamentals.netMargin)}`].filter(Boolean).join(', ') : '';
   const parts = [
-    tr(ctx.lang, 's.company', { name: quote.name, s: symbol, p: money(quote.price), c: percent(quote.changePct), desc: ctx.lang === 'en' ? profile.description ?? '' : '' }).trim(),
+    tr(ctx.lang, 's.company', { name: quote.name, s: symbol, p: money(quote.price), c: percent(quote.changePct), desc: describe(ctx.lang, symbol, profile.description) ?? '' }).trim(),
     ind && tr(ctx.lang, 's.companyTech', { trend: ind.sma200 !== null && ind.price < ind.sma200 ? L('s.trendDown') : L('s.trendUp'), y: pc(ind.ret1y) ?? '—', v: (ind.volAnnual * 100).toFixed(0) }),
     fundText && tr(ctx.lang, 's.companyFund', { f: fundText }),
     missing.length && tr(ctx.lang, 's.companyMissing', { m: missing.join(', ').toLowerCase() }),
@@ -492,7 +492,7 @@ export function analyzePortfolioData(ctx: ToolContext): PortfolioAnalysis {
     if (cashW >= 0.05 && cashW <= 0.4) strengths.push({ key: 'pf.cashBuffer', tone: 'up', params: { v: P(cashW) } });
     if (s.totalReturn > 0) strengths.push({ key: 'pf.profit', tone: 'up', params: { v: pctStr(s.totalReturnPct, 2) } });
     if (concentration === 'low' && positions.length >= 4) strengths.push({ key: 'pf.lowConc', tone: 'up', params: {} });
-    if (top.value / invested > 0.3) weaknesses.push({ key: 'pf.topHeavy', tone: 'down', params: { s: top.symbol, v: P(top.weight) } });
+    if (top.value / invested > 0.3) weaknesses.push({ key: 'pf.topHeavy', tone: 'down', params: { s: top.symbol, v: P(top.value / invested) } });
     if (sectors[0].weight > 0.45 && sectors[0].name !== 'ETFs') weaknesses.push({ key: 'pf.sectorHeavy', tone: 'down', params: { s: category(ctx.lang, sectors[0].name), v: P(sectors[0].weight) } });
     if (positions.length < 4) weaknesses.push({ key: 'pf.fewPositions', tone: 'down', params: { n: String(positions.length) } });
     if (cashW > 0.4) weaknesses.push({ key: 'pf.cashDrag', tone: 'flat', params: { v: P(cashW) } });

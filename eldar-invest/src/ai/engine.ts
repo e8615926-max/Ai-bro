@@ -126,9 +126,10 @@ export async function sendMessage(text: string): Promise<void> {
       } catch (e) {
         const err = e instanceof AiError ? e : new AiError('error', String(e));
         console.warn('[ELDAR AI] Gemini turn failed:', err.code);
-        const rate = err.code === 'ai_rate_limited' || err.code === 'rate_limited';
+        const rate = err.code === 'ai_rate_limited';
+        const busy = err.code === 'rate_limited';
         const shown = useChat.getState().conversations.find((c) => c.id === conv.id)?.messages.find((m) => m.id === reply.id)?.blocks.length ?? 0;
-        useChat.getState().appendBlocks(conv.id, reply.id, [{ type: 'notice', tone: 'warning', text: tr(lang, rate ? 'e.aiRate' : 'e.aiDown') + (rate && err.retryAfter ? ` (~${err.retryAfter}s)` : '') }]);
+        useChat.getState().appendBlocks(conv.id, reply.id, [{ type: 'notice', tone: 'warning', text: tr(lang, rate ? 'e.aiRate' : busy ? 'e.aiBusy' : 'e.aiDown') + ((rate || busy) && err.retryAfter ? ` (~${err.retryAfter}s)` : '') }]);
         // Drop the incomplete model/tool exchange so the next request starts from a valid history.
         useChat.getState().update(conv.id, (c) => {
           const i = c.wire.lastIndexOf(userWire);

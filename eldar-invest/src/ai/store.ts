@@ -36,23 +36,37 @@ interface ChatState {
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const useChat = create<ChatState>((set, get) => {
+  const write = () => {
+    saveTimer = null;
+    const { uid: u, conversations } = get();
+    if (!u) return;
+    const list = conversations.filter((c) => c.messages.length);
+    try {
+      writeJSON(`ai:${u}`, list.slice(0, MAX_CONVERSATIONS));
+    } catch {
+      // Storage full: keep only the newest conversations.
+      try {
+        writeJSON(`ai:${u}`, list.slice(0, 5));
+      } catch {
+        /* history stays in memory for this session */
+      }
+    }
+  };
   const persist = () => {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      const { uid: u, conversations } = get();
-      if (!u) return;
-      try {
-        writeJSON(`ai:${u}`, conversations.filter((c) => c.messages.length).slice(0, MAX_CONVERSATIONS));
-      } catch {
-        // Storage full: keep only the newest conversations.
-        try {
-          writeJSON(`ai:${u}`, conversations.filter((c) => c.messages.length).slice(0, 5));
-        } catch {
-          /* history stays in memory for this session */
-        }
-      }
-    }, 300);
+    saveTimer = setTimeout(write, 150);
   };
+  // Never lose the latest answer when the tab is closed, reloaded or backgrounded.
+  if (typeof window !== 'undefined') {
+    const flush = () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        write();
+      }
+    };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', () => document.hidden && flush());
+  }
 
   return {
     uid: null,
@@ -68,7 +82,9 @@ export const useChat = create<ChatState>((set, get) => {
         // A trade left "executing" by a closed tab was never confirmed to the user: mark it cancelled.
         messages: c.messages.map((m) => ({ ...m, blocks: m.blocks.map((b) => (b.type === 'trade' && b.proposal.status === 'executing' ? { ...b, proposal: { ...b.proposal, status: 'cancelled' as const } } : b)) })),
       }));
-      set({ uid: u, conversations: saved, activeId: null, busy: false });
+      // Reopen the conversation the user was in, so a reload or a visit to another screen doesn't lose their place.
+      const last = readRaw(`ai-active:${u}`);
+      set({ uid: u, conversations: saved, activeId: saved.some((c) => c.id === last) ? last : null, busy: false });
     },
 
     setLang: (lang) => {
@@ -76,8 +92,14 @@ export const useChat = create<ChatState>((set, get) => {
       set({ lang });
     },
     setBusy: (busy) => set({ busy }),
-    newChat: () => set({ activeId: null }),
-    open: (id) => set({ activeId: id }),
+    newChat: () => {
+      writeRaw(`ai-active:${get().uid}`, '');
+      set({ activeId: null });
+    },
+    open: (id) => {
+      writeRaw(`ai-active:${get().uid}`, id);
+      set({ activeId: id });
+    },
     remove: (id) => {
       set({ conversations: get().conversations.filter((c) => c.id !== id), activeId: get().activeId === id ? null : get().activeId });
       persist();
@@ -89,6 +111,7 @@ export const useChat = create<ChatState>((set, get) => {
       if (existing) return existing;
       const now = Date.now();
       const c: Conversation = { id: uid('cv_'), title: '', createdAt: now, updatedAt: now, messages: [], wire: [], focus: [], lang };
+      writeRaw(`ai-active:${get().uid}`, c.id);
       set({ conversations: [c, ...conversations], activeId: c.id });
       return c;
     },

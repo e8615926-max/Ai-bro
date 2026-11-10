@@ -19,6 +19,8 @@ const Activity = lazy(() => import('@/pages/Activity'));
 const Notifications = lazy(() => import('@/pages/Notifications'));
 const Profile = lazy(() => import('@/pages/Profile'));
 const Settings = lazy(() => import('@/pages/Settings'));
+const Assistant = lazy(() => import('@/pages/Assistant'));
+const StockPicks = lazy(() => import('@/pages/StockPicks'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
 const Login = lazy(() => import('@/pages/auth/Login'));
 const Register = lazy(() => import('@/pages/auth/Register'));
@@ -72,6 +74,8 @@ const router = createRouter([
           { path: '/', element: <Dashboard /> },
           { path: '/markets', element: <Markets /> },
           { path: '/markets/:symbol', element: <AssetDetail /> },
+          { path: '/ai', element: <Assistant /> },
+          { path: '/ai/picks', element: <StockPicks /> },
           { path: '/portfolio', element: <Portfolio /> },
           { path: '/watchlist', element: <Watchlist /> },
           { path: '/activity', element: <Activity /> },

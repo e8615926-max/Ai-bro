@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, ChevronDown, FlaskConical, LogOut, Search, Settings, User, X } from 'lucide-react';
+import { Bell, ChevronDown, FlaskConical, History, LogOut, Search, Settings, User, X } from 'lucide-react';
 import { Logo } from '@/components/brand/Logo';
 import { Avatar } from '@/components/ui/misc';
 import { IconButton } from '@/components/ui/Button';
@@ -92,6 +92,7 @@ function UserMenu() {
           <div className="my-1 h-px bg-line" />
           {[
             { to: '/profile', label: 'Profile', icon: User },
+            { to: '/activity', label: 'Activity', icon: History },
             { to: '/settings', label: 'Settings', icon: Settings },
             { to: '/notifications', label: 'Notifications', icon: Bell },
           ].map((i) => (
@@ -140,6 +141,7 @@ function Sidebar() {
           >
             <n.icon size={19} strokeWidth={2} />
             {n.label}
+            {n.accent && <span className="ml-auto rounded-md bg-brand px-1.5 py-0.5 text-[9.5px] font-bold tracking-wide text-brand-ink">AI</span>}
           </NavLink>
         ))}
       </nav>
@@ -203,7 +205,7 @@ function BottomNav() {
   return (
     <nav className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/90 backdrop-blur-xl lg:hidden" aria-label="Primary">
       <div className="mx-auto grid max-w-md grid-cols-5">
-        {NAV.map((n) => (
+        {NAV.filter((n) => !n.desktopOnly).map((n) => (
           <NavLink
             key={n.to}
             to={n.to}
@@ -212,7 +214,7 @@ function BottomNav() {
           >
             {({ isActive }) => (
               <>
-                <span className={cn('flex h-7 w-12 items-center justify-center rounded-full transition-colors', isActive && 'bg-brand-soft')}>
+                <span className={cn('flex h-7 w-12 items-center justify-center rounded-full transition-colors', n.accent ? 'bg-[linear-gradient(135deg,#19c37d,#0a7a4b)] text-white shadow-card' : isActive && 'bg-brand-soft')}>
                   <n.icon size={20} strokeWidth={isActive ? 2.4 : 2} />
                 </span>
                 {n.label}

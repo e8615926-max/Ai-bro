@@ -25,7 +25,7 @@ export const HISTORY_RANGES = Object.keys(SPEC);
 
 export function history(symbol: string, range: string): Promise<HistoryDTO> {
   const spec = SPEC[range];
-  if (!spec) throw new HttpError(400, 'bad_range', 'Unsupported chart range.');
+  if (!spec) return Promise.reject(new HttpError(400, 'bad_range', 'Unsupported chart range.'));
   return cached(`td:h:${symbol}:${range}`, spec.ttl, async () => {
     const qs = new URLSearchParams({ symbol, interval: spec.interval, outputsize: String(spec.size), order: 'ASC', timezone: 'UTC' });
     const d = (await upstream(NAME, `${base()}/time_series?${qs}`, { headers: { Authorization: `apikey ${env('TWELVEDATA_API_KEY')}` } })) as {

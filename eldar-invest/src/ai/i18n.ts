@@ -60,7 +60,7 @@ const en: Dict = {
   'pf.cashBuffer': 'Cash reserve of {v}% gives flexibility',
   'pf.profit': 'Portfolio is up {v} since the start',
   'pf.lowConc': 'No single position dominates',
-  'pf.topHeavy': 'Largest position {s} is {v}% of the portfolio',
+  'pf.topHeavy': 'Largest position {s} is {v}% of your invested money',
   'pf.sectorHeavy': '{s} makes up {v}% of invested money',
   'pf.fewPositions': 'Only {n} position(s): one company\'s news can move everything',
   'pf.cashDrag': '{v}% sits in cash and is not invested',
@@ -82,7 +82,8 @@ const en: Dict = {
   'ui.new': 'New chat',
   'ui.history': 'History',
   'ui.noHistory': 'No conversations yet',
-  'ui.placeholder': 'Ask about a stock, your portfolio, or say "Buy $500 of Tesla"',
+  'ui.placeholder': 'Ask ELDAR AI…',
+  'ui.short': 'Not investment advice · virtual trades only',
   'ui.send': 'Send',
   'ui.thinking': 'Analysing',
   'ui.delete': 'Delete conversation',
@@ -155,7 +156,7 @@ const en: Dict = {
   'c.health': 'Financial health',
   'c.earnings': 'Earnings per share: actual vs expected',
   'c.technical': 'Price picture',
-  'c.yourPosition': 'Your position',
+  'c.yourPosition': 'Your virtual position (simulated prices)',
   'c.missing': 'Not available',
   'c.news': 'News',
   'c.marketNews': 'Market news',
@@ -262,6 +263,7 @@ const en: Dict = {
   'e.fundDemo': 'Financial statements and valuation metrics are not available in demo mode.',
   'e.rate': 'The data provider\'s free quota is used up for the moment. Please try again in about {v} seconds.',
   'e.aiRate': 'The Gemini free quota is used up for now, so I answered with the built-in analyst instead.',
+  'e.aiBusy': 'You are sending messages very quickly, so the built-in analyst answered this one. Gemini will be available again shortly.',
   'e.aiDown': 'The AI service is unavailable right now, so I answered with the built-in analyst instead.',
   'e.generic': 'Something went wrong while preparing this answer: {v}',
   'e.insufficient': 'Not enough virtual cash: the order needs {need}, you have {have}.',
@@ -351,7 +353,7 @@ const ru: Dict = {
   'pf.cashBuffer': 'Запас денег {v}% даёт гибкость',
   'pf.profit': 'Портфель вырос на {v} с начала',
   'pf.lowConc': 'Ни одна позиция не доминирует',
-  'pf.topHeavy': 'Крупнейшая позиция {s} — {v}% портфеля',
+  'pf.topHeavy': 'Крупнейшая позиция {s} — {v}% вложенных средств',
   'pf.sectorHeavy': 'Сектор «{s}» — {v}% вложенных средств',
   'pf.fewPositions': 'Всего позиций: {n}. Новости одной компании могут сдвинуть весь портфель',
   'pf.cashDrag': '{v}% лежит в деньгах и не работает',
@@ -372,7 +374,8 @@ const ru: Dict = {
   'ui.new': 'Новый чат',
   'ui.history': 'История',
   'ui.noHistory': 'Диалогов пока нет',
-  'ui.placeholder': 'Спросите об акции, портфеле или напишите «Купи Теслу на $500»',
+  'ui.placeholder': 'Спросите ELDAR AI…',
+  'ui.short': 'Не инвестиционная рекомендация · сделки только виртуальные',
   'ui.send': 'Отправить',
   'ui.thinking': 'Анализирую',
   'ui.delete': 'Удалить диалог',
@@ -444,7 +447,7 @@ const ru: Dict = {
   'c.health': 'Финансовое здоровье',
   'c.earnings': 'Прибыль на акцию: факт и ожидания',
   'c.technical': 'Картина цены',
-  'c.yourPosition': 'Ваша позиция',
+  'c.yourPosition': 'Ваша виртуальная позиция (цены симулятора)',
   'c.missing': 'Недоступно',
   'c.news': 'Новости',
   'c.marketNews': 'Новости рынка',
@@ -550,6 +553,7 @@ const ru: Dict = {
   'e.fundDemo': 'Финансовая отчётность и оценочные показатели в демо-режиме недоступны.',
   'e.rate': 'Бесплатная квота поставщика данных временно исчерпана. Попробуйте примерно через {v} сек.',
   'e.aiRate': 'Бесплатная квота Gemini сейчас исчерпана, поэтому ответил встроенный аналитик.',
+  'e.aiBusy': 'Сообщения идут слишком часто, поэтому на это ответил встроенный аналитик. Gemini скоро снова будет доступен.',
   'e.aiDown': 'Сервис ИИ сейчас недоступен, поэтому ответил встроенный аналитик.',
   'e.generic': 'Не удалось подготовить ответ: {v}',
   'e.insufficient': 'Не хватает виртуальных денег: нужно {need}, у вас {have}.',
@@ -601,6 +605,11 @@ export const CATEGORY_RU: Record<string, string> = {
   Industrials: 'Промышленность',
   ETFs: 'ETF',
 };
+import { DESCRIPTION_RU } from './descriptions';
+
+/** Catalogue description in the reader's language. */
+export const describe = (lang: AiLang, symbol: string, english: string | null) => (lang === 'ru' ? DESCRIPTION_RU[symbol] ?? english : english);
+
 export const category = (lang: AiLang, c: string) => (lang === 'ru' ? CATEGORY_RU[c] ?? c : c);
 
 export function detectLang(text: string): AiLang | null {
